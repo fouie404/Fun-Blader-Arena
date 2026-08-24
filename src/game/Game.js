@@ -5,6 +5,7 @@ import { SpawnSystem } from './SpawnSystem.js';
 import { CombatSystem } from './CombatSystem.js';
 import { Player } from './Player.js';
 import { Enemy } from './Enemy.js';
+import { RemotePlayer } from './RemotePlayer.js';
 import { SKINS } from './Skins.js';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera.js';
 import { Environment } from '../world/Environment.js';
@@ -15,8 +16,6 @@ import { Scoreboard } from '../ui/Scoreboard.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { NetworkManager } from '../net/NetworkManager.js';
 import { Input } from '../utils/Input.js';
-
-const BOT_COUNT = 7;
 
 export class Game {
   constructor(container) {
@@ -65,6 +64,8 @@ export class Game {
 
     this.player = null;
     this.enemies = [];
+    this.remotes = new Map();
+    this._botCounter = 0;
     this.slots = { used: 0, max: 3 };
     this.time = 0;
     this.paused = false;
@@ -73,7 +74,9 @@ export class Game {
     this._errShown = false;
 
     this.player = new Player(this, new THREE.Vector3(0, 0, 0));
-    for (let i = 0; i < BOT_COUNT; i++) this.createEnemy(i);
+    const botCount = Math.max(1, Math.min(10, this.state.settings.bots || 7));
+    for (let i = 0; i < botCount; i++) this.createEnemy(i);
+    this.network.connect();
 
     this.input.onLockChange = (locked) => {
       if (!locked && this.state.phase === 'playing' && this.player && !this.player.dead) {
@@ -98,7 +101,68 @@ export class Game {
     const colors = SKINS[skinId];
     const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 9 }));
     const pos = this.spawn.getSpawn(avoid);
-    this.enemies.push(new Enemy(this, i, pos, colors, skinId));
+    this.enemies.push(new Enemy(this, this._botCounter++, pos, colors, skinId));
+  }
+
+  spawnBotAt(pos) {
+    const keys = Object.keys(SKINS);
+    const skinId = keys[Math.floor(Math.random() * keys.length)];
+    const bot = new Enemy(this, this._botCounter++, pos, SKINS[skinId], skinId);
+    this.enemies.push(bot);
+    return bot;
+  }
+
+  pickBotToReplace() {
+    for (const b of this.enemies) {
+      if (b.dead) return b;
+    }
+    let best = null;
+    let far = -1;
+    for (const b of this.enemies) {
+      const d = this.player ? b.pos.distanceToSquared(this.player.pos) : 0;
+      if (d > far) {
+        far = d;
+        best = b;
+      }
+    }
+    return best;
+  }
+
+  addRemotePlayer(id) {
+    if (!id || id === this.network.myId || this.remotes.has(id)) return;
+    const bot = this.pickBotToReplace();
+    if (!bot) return;
+
+    const idx = this.enemies.indexOf(bot);
+    if (idx >= 0) this.enemies.splice(idx, 1);
+    this.combat.unregister(bot);
+    this.scene.remove(bot.rig.root);
+    bot.rig.dispose();
+
+    const stats = bot.stats;
+    this.state.unregister(stats.name);
+    stats.name = `Player ${id.slice(1, 4).toUpperCase()}`;
+    stats.kills = 0;
+    stats.deaths = 0;
+    this.state.register(stats);
+
+    const keys = Object.keys(SKINS);
+    const skinId = keys[Math.floor(Math.random() * keys.length)];
+    const rp = new RemotePlayer(this, id, stats, bot.pos.clone(), skinId);
+    this.remotes.set(id, rp);
+    console.log(`%c[LAN] ${stats.name} entered the arena`, 'color:#7fd4ff');
+  }
+
+  removeRemotePlayer(id) {
+    const r = this.remotes.get(id);
+    if (!r) return;
+    this.remotes.delete(id);
+    this.combat.unregister(r);
+    this.scene.remove(r.rig.root);
+    r.rig.dispose();
+    this.state.unregister(r.stats.name);
+    this.spawnBotAt(r.pos.clone());
+    console.log('%c[LAN] A player left - a knight fills the slot', 'color:#7fd4ff');
   }
 
   start() {
@@ -183,6 +247,20 @@ export class Game {
     if (partial.skin !== undefined && this.player) {
       this.player.applySkin(s.skin);
     }
+    if (partial.bots !== undefined) {
+      this.setBotCount(Math.max(1, Math.min(10, Math.round(partial.bots))));
+    }
+  }
+
+  setBotCount(n) {
+    for (const b of this.enemies) {
+      this.combat.unregister(b);
+      this.scene.remove(b.rig.root);
+      b.rig.dispose();
+    }
+    this.enemies.length = 0;
+    this.slots.used = 0;
+    for (let i = 0; i < n; i++) this.createEnemy(i);
   }
 
   applyShadows(on) {
@@ -274,6 +352,8 @@ export class Game {
     }
 
     for (const e of this.enemies) e.update(dt);
+    for (const r of this.remotes.values()) r.update(dt);
+    this.network.update(dt);
 
     this.combat.update(dt);
     this.cameraRig.update(dt, this.player ? this.player.pos : null, camMode);

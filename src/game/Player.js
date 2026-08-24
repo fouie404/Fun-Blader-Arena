@@ -65,6 +65,11 @@ export class Player extends Fighter {
       return;
     }
 
+    if (this.attack && !this.attack._netSent) {
+      this.attack._netSent = true;
+      this.game.network.send({ t: 'attack', id: this.game.network.myId, type: this.attack.def.key });
+    }
+
     const k = input.keys;
     let mx = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
     let mz = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0);

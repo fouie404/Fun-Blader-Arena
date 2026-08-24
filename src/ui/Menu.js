@@ -22,7 +22,7 @@ export class Menu {
 
     this.root.innerHTML = `
       <div class="menu-inner">
-        <h1 class="game-title">BLADE ARENA</h1>
+        <h1 class="game-title">FUN BLADER ARENA</h1>
         <div class="game-subtitle">Fight &middot; Fall &middot; Rise Again</div>
 
         <div class="menu-panel" id="panel-home">
@@ -33,8 +33,8 @@ export class Menu {
         </div>
 
         <div class="menu-panel" id="panel-skins" style="display:none">
-          <div class="panel-title">CHOOSE YOUR KNIGHT</div>
-          <div class="skin-hint">Your knight stands on the arena floor behind this panel &mdash; pick a skin and watch it change live.</div>
+          <div class="panel-title small">CHOOSE YOUR KNIGHT</div>
+          <div class="skin-hint">Your knight stands in the center &mdash; pick a skin and watch it change live.</div>
           <div class="skin-grid" id="skin-grid">${skinCards}</div>
           <button class="menu-btn small" id="btn-back-3">BACK</button>
         </div>
@@ -50,6 +50,11 @@ export class Menu {
             <label>Volume</label>
             <input type="range" id="set-vol" min="0" max="1" step="0.05" value="0.7" />
             <span class="set-val" id="val-vol">70%</span>
+          </div>
+          <div class="setting-row">
+            <label>Enemy Bots</label>
+            <input type="range" id="set-bots" min="1" max="10" step="1" value="7" />
+            <span class="set-val" id="val-bots">7</span>
           </div>
           <div class="setting-row">
             <label>Shadows</label>
@@ -120,6 +125,11 @@ export class Menu {
       $('val-vol').textContent = `${Math.round(vol.value * 100)}%`;
       this.onSettings({ volume: Number(vol.value) });
     });
+    const bots = $('set-bots');
+    bots.addEventListener('input', () => {
+      $('val-bots').textContent = bots.value;
+      this.onSettings({ bots: Number(bots.value) });
+    });
     $('set-shadows').addEventListener('change', (e) => {
       this.onSettings({ shadows: e.target.checked });
     });
@@ -153,6 +163,8 @@ export class Menu {
     $('val-sens').textContent = Number(s.sensitivity).toFixed(1);
     $('set-vol').value = s.volume;
     $('val-vol').textContent = `${Math.round(s.volume * 100)}%`;
+    $('set-bots').value = s.bots;
+    $('val-bots').textContent = String(s.bots);
     $('set-shadows').checked = s.shadows;
     this.selectSkin(s.skin || 'knight');
   }

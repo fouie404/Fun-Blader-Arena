@@ -549,10 +549,10 @@ kbd {
 
 .skin-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  width: 460px;
-  max-width: 90vw;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 560px;
+  max-width: 88vw;
   margin-bottom: 10px;
 }
 
@@ -562,8 +562,8 @@ kbd {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 7px;
-  padding: 14px 12px;
+  gap: 5px;
+  padding: 10px 8px;
   background: linear-gradient(#1d1812, #14100c);
   border: 1px solid rgba(201, 162, 39, 0.35);
   border-radius: 10px;
@@ -584,25 +584,35 @@ kbd {
 }
 
 .skin-chip {
-  width: 46px;
-  height: 46px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
   border: 2px solid rgba(0, 0, 0, 0.5);
   box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.5);
 }
 
 .skin-name {
   font-weight: 700;
-  letter-spacing: 2px;
-  font-size: 15px;
+  letter-spacing: 1.5px;
+  font-size: 13.5px;
   color: #ffe9ad;
 }
 
 .skin-desc {
-  font-size: 12px;
+  font-size: 11px;
   color: #b9ad93;
-  line-height: 1.45;
+  line-height: 1.35;
   white-space: normal;
+}
+
+#panel-skins {
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+}
+
+.skin-hint {
+  font-size: 12px;
+  margin-bottom: 10px;
 }
 
 #menu {
@@ -610,11 +620,78 @@ kbd {
 }
 
 #menu.skins-mode {
-  background: linear-gradient(rgba(5, 4, 8, 0.18), rgba(8, 6, 12, 0.38));
+  background: linear-gradient(rgba(5, 4, 8, 0.15), rgba(8, 6, 12, 0.32));
+}
+
+#menu.skins-mode .game-title,
+#menu.skins-mode .game-subtitle,
+#menu.skins-mode .menu-footer {
+  display: none;
 }
 
 #menu.skins-mode .menu-inner {
-  transform: translateX(clamp(-300px, -22vw, -160px));
+  transform: none;
+}
+
+#menu.skins-mode #panel-skins {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  top: auto;
+  transform: translateX(-50%);
+  max-height: none;
+  overflow: visible;
+  display: block;
+  width: auto;
+  background: rgba(10, 8, 14, 0.74);
+  border: 1px solid rgba(201, 162, 39, 0.4);
+  border-radius: 14px;
+  padding: 12px 20px 14px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+
+#menu.skins-mode #btn-back-3 {
+  position: fixed;
+  top: 24px;
+  right: 30px;
+  margin: 0;
+}
+
+.panel-title.small {
+  font-size: 17px;
+  letter-spacing: 5px;
+  margin-bottom: 4px;
+}
+
+#panel-skins .skin-hint {
+  margin-bottom: 8px;
+}
+
+#panel-skins .skin-grid {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  width: auto;
+  margin-bottom: 10px;
+}
+
+#panel-skins .skin-card {
+  width: 148px;
+  padding: 9px 8px;
+  gap: 4px;
+}
+
+#panel-skins .skin-chip {
+  width: 30px;
+  height: 30px;
+}
+
+#panel-skins .skin-name {
+  font-size: 12.5px;
+}
+
+#panel-skins .skin-desc {
+  font-size: 10.5px;
 }
 
 /* error overlay */

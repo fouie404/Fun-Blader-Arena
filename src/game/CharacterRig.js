@@ -116,7 +116,6 @@ export class CharacterRig {
     this.barBg.renderOrder = 20;
     this.barFgMat = new THREE.SpriteMaterial({ color: 0x58e05a, depthTest: false });
     this.barFg = new THREE.Sprite(this.barFgMat);
-    this.barFg.center.set(0, 0.5);
     this.barFg.scale.set(0.87, 0.065, 1);
     this.barFg.position.x = -0.435;
     this.barFg.renderOrder = 21;
@@ -244,7 +243,9 @@ export class CharacterRig {
 
   setHealthBar(frac) {
     frac = clamp(frac, 0, 1);
-    this.barFg.scale.x = Math.max(0.001, 0.87 * frac);
+    const w = Math.max(0.001, 0.87 * frac);
+    this.barFg.scale.x = w;
+    this.barFg.position.x = -0.435 + w / 2;
     if (frac > 0.5) this.barFgMat.color.setHex(0x58e05a);
     else if (frac > 0.25) this.barFgMat.color.setHex(0xffb347);
     else this.barFgMat.color.setHex(0xff4747);

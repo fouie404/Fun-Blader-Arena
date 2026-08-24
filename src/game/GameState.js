@@ -6,7 +6,8 @@ export class GameState {
       sensitivity: 1.0,
       volume: 0.7,
       shadows: true,
-      skin: 'knight'
+      skin: 'knight',
+      bots: 7
     };
     this.roster = new Map();
   }
