@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Fun Blader Arena</title>
+  <script>
+    window.addEventListener('error', function (e) {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#4a0d0d;color:#ffd6d6;font:12px/1.5 Consolas,monospace;padding:10px 14px;white-space:pre-wrap;border-bottom:2px solid #a33;';
+      d.textContent = 'BOOT ERROR: ' + (e.message || e) + (e.filename ? '  @ ' + e.filename.split('/').pop() + ':' + e.lineno : '');
+      document.body.appendChild(d);
+    });
+  </script>
   <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5757231614668469" crossorigin="anonymous"></script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%94%EF%B8%8F%3C/text%3E%3C/svg%3E" />
 </head>

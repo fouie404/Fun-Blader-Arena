@@ -43,7 +43,7 @@ export function fakeName(used) {
 const _intent = new THREE.Vector3();
 
 export class Enemy extends Fighter {
-  constructor(game, index, spawnPos, colors, skinId = 'knight', elite = false) {
+  constructor(game, index, spawnPos, colors, skinId = 'knight', tier = 'normal') {
     super(game, {
       name: fakeName(game.usedNames || (game.usedNames = new Set())),
       isEnemy: true,
@@ -51,10 +51,16 @@ export class Enemy extends Fighter {
       pos: spawnPos,
       skin: skinId
     });
-    this.elite = !!elite;
+    this.tier = tier;
+    this.isPro = tier !== 'normal';
     const type = TYPES[index % TYPES.length];
     this.pKey = type;
-    if (this.elite) {
+    if (tier === 'skilled') {
+      this.p = {
+        detect: 45, engage: 3.0, keep: 2.0, strafeAmt: 0.55,
+        blockChance: 0.85, cd: [0.6, 1.1], speedMul: 1.12
+      };
+    } else if (tier === 'pro') {
       this.p = {
         detect: 42, engage: 3.0, keep: 2.0, strafeAmt: 0.55,
         blockChance: 0.78, cd: [0.8, 1.4], speedMul: 1.1
@@ -63,6 +69,9 @@ export class Enemy extends Fighter {
       this.p = PERSONALITIES[type];
     }
     this.speedMul = this.p.speedMul;
+    this.diamondTarget = null;
+    this._diaT = Math.random() * 0.5;
+    this.tauntT = 0;
 
     this.state = 'wander';
     this.wanderTarget = new THREE.Vector3().copy(this.pos);
@@ -161,8 +170,8 @@ export class Enemy extends Fighter {
     if (this.dead) return;
     if (this.blockCd <= 0 && Math.random() < this.p.blockChance) {
       this.blockT = randRange(0.5, 0.95);
-      this.blockCd = this.elite ? 1.2 : 1.8;
-    } else if (this.elite && Math.random() < 0.35) {
+      this.blockCd = this.isPro ? 1.0 : 1.8;
+    } else if (this.isPro && Math.random() < 0.35) {
       this.dodgeJumpT = 0.25;
     } else if (Math.random() < 0.35 && attacker) {
       const ax = this.pos.x - attacker.pos.x;
@@ -187,8 +196,32 @@ export class Enemy extends Fighter {
     this.thinkT = randRange(4, 9);
   }
 
+  startTaunt() {
+    this.tauntT = 2.5;
+    this.attack = null;
+    this.blockT = 0;
+    this.releaseSlot();
+    this.state = 'taunt';
+  }
+
   update(dt) {
     this._t += dt;
+
+    if (this.tauntT > 0) {
+      this.tauntT -= dt;
+      this.setBlocking(Math.sin(this.tauntT * 22) > 0);
+      this.applyMovement(dt, { moveDir: _intent.set(0, 0, 0), sprint: false, jump: this.grounded });
+      this.rig.root.position.copy(this.pos);
+      this.rig.setYaw(this.yaw);
+      this.syncRigAnim(dt, { lookAround: false });
+      if (this.tauntT <= 0) {
+        this.setBlocking(false);
+        this.state = 'wander';
+        this.pickWanderTarget();
+      }
+      return;
+    }
+
     const alive = this.updateCommon(dt);
     if (!alive) return;
 
@@ -271,6 +304,10 @@ export class Enemy extends Fighter {
             this.state = 'afk';
             this.afkT = randRange(3, 8);
             this._afkBase = this.yaw;
+            this._afkSpin = Math.random() < 0.3;
+            this._afkSpinSpeed = randRange(1.5, 3) * (Math.random() < 0.5 ? -1 : 1);
+            this._afkSwaySpeed = randRange(0.5, 1.4);
+            this._afkSwayAmp = randRange(0.6, 1.1);
             break;
           }
           if (roll < 0.33) {
@@ -294,7 +331,11 @@ export class Enemy extends Fighter {
 
       case 'afk': {
         this.afkT -= dt;
-        faceYaw = this._afkBase + Math.sin(this._t * 0.8) * 0.9;
+        if (this._afkSpin) {
+          faceYaw = this._afkBase + this._t * this._afkSpinSpeed;
+        } else {
+          faceYaw = this._afkBase + Math.sin(this._t * this._afkSwaySpeed) * this._afkSwayAmp;
+        }
         if (this.afkT <= 0) {
           this.state = 'wander';
           this.pickWanderTarget();
@@ -335,12 +376,11 @@ export class Enemy extends Fighter {
       case 'flee': {
         this.fleeT -= dt;
         if (!hasTarget || this.fleeT <= 0 || distP > 25) {
-          this.lookAround = false;
           this.state = hasTarget ? 'combat' : 'wander';
           this.attackTimer = 0.3;
           break;
         }
-        faceYaw = Math.atan2(-dx, -dz);
+        faceYaw = Math.atan2(dx, dz);
         sprint = true;
         _intent.set(-dx / distP, 0, -dz / distP);
         if (distP < 5) {
@@ -357,14 +397,14 @@ export class Enemy extends Fighter {
           break;
         }
         faceYaw = Math.atan2(dx, dz);
-        sprint = distP > 6;
+        sprint = true;
         _intent.set(dx / distP, 0, dz / distP);
         if (this.reactT > 0) {
           this.reactT -= dt;
           _intent.multiplyScalar(0.4);
         }
         if (distP < this.p.engage + 0.5) {
-          if (this.elite) {
+          if (this.isPro) {
             this.state = 'combat';
             this.attackTimer = Math.min(this.attackTimer, 0.3);
             if (Math.random() < 0.3) this.fleeAt = randRange(2, 5);
@@ -442,7 +482,7 @@ export class Enemy extends Fighter {
           0,
           (dz / distP) * radial + (dx / distP) * this.strafeDir * this.p.strafeAmt
         );
-        sprint = distP > this.p.keep + 3;
+        sprint = distP > 2.2;
 
         if (this.fleeAt !== undefined && this.fleeAt !== Infinity) {
           this.fleeAt -= dt;
@@ -455,7 +495,7 @@ export class Enemy extends Fighter {
         }
 
         if (this.dashTimer <= 0 && distP > this.p.engage + 1.5) {
-          if (Math.random() < (this.elite ? 0.7 : 0.5)) this.tryDash(dx / distP, dz / distP);
+          if (Math.random() < (this.isPro ? 0.7 : 0.5)) this.tryDash(dx / distP, dz / distP);
           this.dashTimer = randRange(2.8, 4.5);
         }
 
@@ -463,7 +503,7 @@ export class Enemy extends Fighter {
           const fx = Math.sin(this.yaw);
           const fz = Math.cos(this.yaw);
           const aim = (dx / distP) * fx + (dz / distP) * fz;
-          const aimGate = this.elite ? 0.93 : 0.5;
+          const aimGate = this.isPro ? 0.93 : 0.3;
           if (aim > aimGate && this.startAttack()) {
             this.attackTimer = randRange(this.p.cd[0], this.p.cd[1]);
           }
@@ -491,15 +531,60 @@ export class Enemy extends Fighter {
       }
     }
 
-    const ilen = _intent.length();
+    let ilen = _intent.length();
     if (ilen > 1) _intent.divideScalar(ilen);
+
+    this._diaT -= dt;
+    if (this._diaT <= 0) {
+      this._diaT = 0.5;
+      this.diamondTarget = null;
+      if ((this.state === 'wander' || this.state === 'chase' || this.state === 'circle') && this.game.diamonds.length > 0) {
+        let best = null;
+        let bd = 196;
+        for (const d of this.game.diamonds) {
+          const ddx = d.mesh.position.x - this.pos.x;
+          const ddz = d.mesh.position.z - this.pos.z;
+          const d2 = ddx * ddx + ddz * ddz;
+          if (d2 < bd) {
+            bd = d2;
+            best = d;
+          }
+        }
+        this.diamondTarget = best;
+      }
+    }
+    if (this.diamondTarget && (this.state === 'wander' || (this.state === 'chase' && distP > 6) || this.state === 'circle')) {
+      const dp = this.diamondTarget.mesh.position;
+      const ddx = dp.x - this.pos.x;
+      const ddz = dp.z - this.pos.z;
+      const dd = Math.hypot(ddx, ddz) || 1;
+      _intent.set(ddx / dd, 0, ddz / dd);
+      faceYaw = Math.atan2(ddx, ddz);
+      sprint = true;
+      ilen = 1;
+    }
+
+    if (ilen > 0.3 && this.grounded) {
+      const probeX = this.pos.x + _intent.x * 1.15;
+      const probeZ = this.pos.z + _intent.z * 1.15;
+      if (this.game.collision.blockedAt(probeX, probeZ, this.radius, this.pos.y)) {
+        const lx = _intent.z;
+        const lz = -_intent.x;
+        if (!this.game.collision.blockedAt(this.pos.x + lx * 1.15, this.pos.z + lz * 1.15, this.radius, this.pos.y)) {
+          _intent.set(lx, 0, lz);
+        } else {
+          _intent.set(-_intent.x, 0, -_intent.z);
+          this.dodgeJumpT = 0.15;
+        }
+      }
+    }
 
     this.blockT -= dt;
     this.blockCd -= dt;
     const wasBlocking = this.blockT > 0;
     this.setBlocking(this.blockT > 0);
     if (
-      this.elite && wasBlocking && this.blockT <= 0 &&
+      this.isPro && wasBlocking && this.blockT <= 0 &&
       hasTarget && distP < this.p.engage + 0.5 && !this.attack
     ) {
       this.attackTimer = Math.min(this.attackTimer, 0.1);

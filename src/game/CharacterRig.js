@@ -32,7 +32,28 @@ const GEO = {
   coil: new THREE.CylinderGeometry(0.05, 0.08, 0.34, 6),
   orb: new THREE.SphereGeometry(0.09, 8, 6),
   halo: new THREE.TorusGeometry(0.26, 0.035, 8, 24),
-  crystal: new THREE.OctahedronGeometry(0.11, 0)
+  crystal: new THREE.OctahedronGeometry(0.11, 0),
+  quiver: new THREE.CylinderGeometry(0.09, 0.09, 0.5, 6),
+  brim: new THREE.CylinderGeometry(0.34, 0.34, 0.04, 10),
+  feather: new THREE.BoxGeometry(0.08, 0.3, 0.03),
+  strap: new THREE.BoxGeometry(0.14, 0.9, 0.03),
+  longblade: new THREE.BoxGeometry(0.045, 1.35, 0.11),
+  katanaGuard: new THREE.CylinderGeometry(0.09, 0.09, 0.03, 8),
+  scythePole: new THREE.CylinderGeometry(0.035, 0.035, 1.5, 6),
+  scytheBlade: new THREE.BoxGeometry(0.5, 0.09, 0.07),
+  hammerHead: new THREE.BoxGeometry(0.44, 0.32, 0.56),
+  prong: new THREE.ConeGeometry(0.05, 0.42, 5),
+  beamBlade: new THREE.BoxGeometry(0.1, 1.15, 0.1),
+  wingBig: new THREE.BoxGeometry(1.0, 1.3, 0.04),
+  collar: new THREE.BoxGeometry(0.12, 0.3, 0.3),
+  jagged: new THREE.BoxGeometry(0.12, 0.4, 0.05),
+  chestF: new THREE.BoxGeometry(0.5, 0.24, 0.4),
+  hipsF: new THREE.BoxGeometry(0.68, 0.26, 0.44),
+  hairBack: new THREE.BoxGeometry(0.42, 0.55, 0.16),
+  hairSide: new THREE.BoxGeometry(0.1, 0.4, 0.12),
+  spearPole: new THREE.CylinderGeometry(0.03, 0.03, 1.7, 6),
+  spearTip: new THREE.ConeGeometry(0.07, 0.3, 5),
+  skirt: new THREE.ConeGeometry(0.42, 0.5, 8)
 };
 
 function makeNameTexture(name, color) {
@@ -70,6 +91,10 @@ export class CharacterRig {
     this.matSkin = new THREE.MeshStandardMaterial({ color: 0xd9b38c, roughness: 0.9, transparent: true });
     this.matDark = new THREE.MeshStandardMaterial({ color: 0x2e2a33, roughness: 0.9, transparent: true });
     this.matBlade = new THREE.MeshStandardMaterial({ color: 0xd7dee8, roughness: 0.25, metalness: 0.85, transparent: true });
+    this.matBeam = new THREE.MeshBasicMaterial({
+      color: 0x88aaff, transparent: true, opacity: 0.92, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this.matHair = new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.9, transparent: true });
     this.matGlow = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x8a2be2, emissiveIntensity: 2.2 });
     this.mats = [this.matPrimary, this.matSecondary, this.matAccent, this.matSkin, this.matDark, this.matBlade];
 
@@ -113,6 +138,39 @@ export class CharacterRig {
     this.legR = this.makeLeg(1);
     bodyPivot.add(this.legL, this.legR);
 
+    this.chestF = new THREE.Mesh(GEO.chestF, this.matPrimary);
+    this.chestF.position.y = 1.38;
+    this.chestF.castShadow = true;
+    this.torsoPivot.add(this.chestF);
+    this.chestF.visible = false;
+
+    this.hipsF = new THREE.Mesh(GEO.hipsF, this.matSecondary);
+    this.hipsF.position.y = 0.78;
+    this.hipsF.castShadow = true;
+    bodyPivot.add(this.hipsF);
+    this.hipsF.visible = false;
+
+    this.hairBack = new THREE.Mesh(GEO.hairBack, this.matHair);
+    this.hairBack.position.set(0, 1.74, -0.28);
+    this.hairBack.castShadow = true;
+    this.torsoPivot.add(this.hairBack);
+    this.hairBack.visible = false;
+
+    this.hairL = new THREE.Mesh(GEO.hairSide, this.matHair);
+    this.hairL.position.set(-0.28, 1.72, 0);
+    this.torsoPivot.add(this.hairL);
+    this.hairL.visible = false;
+    this.hairR = new THREE.Mesh(GEO.hairSide, this.matHair);
+    this.hairR.position.set(0.28, 1.72, 0);
+    this.torsoPivot.add(this.hairR);
+    this.hairR.visible = false;
+
+    this.skirt = new THREE.Mesh(GEO.skirt, this.matPrimary);
+    this.skirt.position.y = 0.72;
+    this.skirt.castShadow = true;
+    bodyPivot.add(this.skirt);
+    this.skirt.visible = false;
+
     this.buildSword();
 
     this.healthGroup = new THREE.Group();
@@ -139,6 +197,77 @@ export class CharacterRig {
     this.setSkin(this.skinId);
   }
 
+  buildSword(type = 'sword') {
+    if (this.sword) {
+      this.armR.hand.remove(this.sword);
+      this.sword = null;
+    }
+    const s = new THREE.Group();
+    const mk = (geo, mat, x = 0, y = 0, z = 0) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      s.add(m);
+      return m;
+    };
+
+    if (type === 'katana') {
+      mk(GEO.longblade, this.matBlade, 0, 0.78, 0);
+      mk(GEO.katanaGuard, this.matAccent, 0, 0.12, 0);
+      mk(GEO.grip, this.matDark, 0, -0.02, 0);
+      mk(GEO.pommel, this.matGlow, 0, -0.19, 0);
+      s.rotation.x = 1.02;
+    } else if (type === 'scythe') {
+      mk(GEO.scythePole, this.matDark, 0, 0.45, 0);
+      const b1 = mk(GEO.scytheBlade, this.matBlade, 0.24, 1.16, 0);
+      b1.rotation.z = 0.55;
+      const b2 = mk(GEO.scytheBlade, this.matBlade, 0.46, 1.0, 0);
+      b2.rotation.z = 0.95;
+      b2.scale.set(0.85, 1, 1);
+      const edge = mk(GEO.scytheBlade, this.matGlow, 0.27, 1.24, 0);
+      edge.rotation.z = 0.55;
+      edge.scale.set(0.4, 1.15, 0.6);
+      s.rotation.x = 0.85;
+    } else if (type === 'hammer') {
+      mk(GEO.scythePole, this.matDark, 0, 0.35, 0);
+      mk(GEO.hammerHead, this.matBlade, 0, 0.98, 0);
+      mk(GEO.orb, this.matGlow, 0, 0.98, 0.29);
+      mk(GEO.orb, this.matGlow, 0, 0.98, -0.29);
+      s.rotation.x = 0.95;
+    } else if (type === 'trident') {
+      mk(GEO.scythePole, this.matBlade, 0, 0.5, 0);
+      mk(GEO.prong, this.matBlade, 0, 1.28, 0);
+      const l = mk(GEO.prong, this.matBlade, -0.17, 1.1, 0);
+      l.rotation.z = 0.3;
+      const r = mk(GEO.prong, this.matBlade, 0.17, 1.1, 0);
+      r.rotation.z = -0.3;
+      s.rotation.x = 1.0;
+    } else if (type === 'beam') {
+      const beam = new THREE.Mesh(GEO.beamBlade, this.matBeam);
+      beam.position.y = 0.74;
+      s.add(beam);
+      mk(GEO.guard, this.matAccent, 0, 0.12, 0);
+      mk(GEO.grip, this.matDark, 0, -0.03, 0);
+      s.rotation.x = 1.05;
+    } else if (type === 'spear') {
+      mk(GEO.spearPole, this.matDark, 0, 0.4, 0);
+      mk(GEO.spearTip, this.matBlade, 0, 1.35, 0);
+      const c1 = mk(GEO.prong, this.matBlade, 0, 1.18, 0);
+      c1.scale.set(0.7, 0.6, 0.7);
+      s.rotation.x = 0.9;
+    } else {
+      const blade = mk(GEO.blade, this.matBlade, 0, 0.68, 0);
+      void blade;
+      mk(GEO.guard, this.matAccent, 0, 0.13, 0);
+      mk(GEO.grip, this.matDark, 0, -0.03, 0);
+      mk(GEO.pommel, this.matAccent, 0, -0.2, 0);
+      s.rotation.x = 1.15;
+    }
+
+    this.armR.hand.add(s);
+    this.sword = s;
+  }
+
   setSkin(id) {
     const s = SKINS[id] || SKINS.knight;
     this.skinId = SKINS[id] ? id : 'knight';
@@ -148,6 +277,21 @@ export class CharacterRig {
     this.matBlade.emissive.setHex(s.bladeGlow || 0x000000);
     this.matBlade.emissiveIntensity = s.bladeGlow ? 0.85 : 0;
     this.matGlow.emissive.setHex(s.bladeGlow || 0x8a2be2);
+    this.matBeam.color.setHex(s.bladeGlow || 0x88aaff);
+    const female = !!s.female;
+    this.chestF.visible = female;
+    this.hipsF.visible = female;
+    this.hairBack.visible = female;
+    this.hairL.visible = female;
+    this.hairR.visible = female;
+    this.skirt.visible = female;
+    this.torsoPivot.children[0].scale.x = female ? 0.84 : 1;
+    this.armL.pivot.position.x = female ? 0.4 : 0.47;
+    this.armR.pivot.position.x = female ? -0.4 : -0.47;
+    this.armL.pivot.children[0].scale.x = female ? 0.82 : 1;
+    this.armR.pivot.children[0].scale.x = female ? 0.82 : 1;
+    if (female) this.matHair.color.setHex(s.primary);
+    this.buildSword(s.blade || 'sword');
     this.rebuildDecor(s.decor || 'knight');
   }
 
@@ -330,6 +474,439 @@ export class CharacterRig {
         this.orbitGroup.add(crystal);
       }
       g.add(this.orbitGroup);
+    } else if (key === 'squire') {
+      add(GEO.hood, this.matSecondary, 0, 2.28, -0.02).scale.setScalar(0.8);
+      const q = add(GEO.quiver, this.matDark, -0.28, 1.35, -0.28);
+      q.rotation.z = 0.4;
+      add(GEO.strap, this.matAccent, 0.12, 1.22, 0.23).rotation.z = -0.5;
+    } else if (key === 'mercenary') {
+      add(GEO.brim, this.matDark, 0, 2.02, 0).scale.setScalar(0.75);
+      const strap = add(GEO.strap, this.matSecondary, -0.1, 1.22, 0.23);
+      strap.rotation.z = 0.55;
+      const pad = add(GEO.pauldron, this.matSecondary, 0.52, 1.62, 0);
+      pad.scale.setScalar(1.2);
+      add(GEO.eye, this.matGlow, -0.09, 1.87, 0.27);
+    } else if (key === 'pikeman') {
+      add(GEO.helm, this.matSecondary, 0, 2.06, 0);
+      add(GEO.strap, this.matDark, 0, 1.9, 0.25).scale.set(0.5, 0.5, 0.4);
+      add(GEO.tabard, this.matSecondary, 0, 1.12, 0.235);
+    } else if (key === 'archerguard') {
+      add(GEO.brim, this.matSecondary, 0, 2.08, 0);
+      add(GEO.hood, this.matPrimary, 0, 2.26, -0.02).scale.setScalar(0.7);
+      const q = add(GEO.quiver, this.matDark, 0.3, 1.4, -0.28);
+      q.rotation.z = -0.45;
+      add(GEO.strap, this.matSecondary, -0.1, 1.24, 0.22).rotation.z = 0.5;
+    } else if (key === 'ironclad') {
+      add(GEO.greathelm, this.matSecondary, 0, 1.88, 0);
+      add(GEO.slit, this.matDark, 0, 1.92, 0);
+      const pl = add(GEO.pauldron, this.matSecondary, -0.52, 1.6, 0);
+      pl.scale.setScalar(1.35);
+      const pr = add(GEO.pauldron, this.matSecondary, 0.52, 1.6, 0);
+      pr.scale.setScalar(1.35);
+      add(GEO.tabard, this.matDark, 0, 1.1, 0.24);
+      for (let i = 0; i < 3; i++) {
+        add(GEO.pommel, this.matAccent, -0.2 + i * 0.2, 1.5, 0.24).scale.setScalar(0.6);
+      }
+    } else if (key === 'duelist') {
+      const brim = add(GEO.brim, this.matPrimary, 0, 2.14, 0);
+      brim.scale.setScalar(0.85);
+      const feather = add(GEO.feather, this.matAccent, 0.18, 2.32, -0.08);
+      feather.rotation.z = -0.6;
+      const sash = add(GEO.strap, this.matAccent, 0.1, 1.2, 0.24);
+      sash.rotation.z = -0.6;
+      add(GEO.cloak, this.matPrimary, 0, 1.24, -0.27).scale.set(0.7, 0.9, 1);
+    } else if (key === 'venom') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.36, -0.02);
+      hood.rotation.y = Math.PI / 6;
+      add(GEO.mask, this.matDark, 0, 1.84, 0.25);
+      add(GEO.eye, this.matGlow, -0.09, 1.87, 0.29);
+      add(GEO.eye, this.matGlow, 0.09, 1.87, 0.29);
+      const drip = add(GEO.orb, this.matGlow, 0, 2.5, 0.1);
+      drip.scale.setScalar(0.5);
+    } else if (key === 'sandreaper') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.34, 0);
+      hood.scale.set(1.1, 1.1, 1.1);
+      add(GEO.cloak, this.matSecondary, 0, 1.2, -0.27);
+      add(GEO.mask, this.matDark, 0, 1.86, 0.24);
+      add(GEO.eye, this.matAccent, -0.08, 1.9, 0.27);
+      add(GEO.eye, this.matAccent, 0.08, 1.9, 0.27);
+    } else if (key === 'thunderguard') {
+      const coil = add(GEO.coil, this.matSecondary, 0, 2.24, -0.05);
+      void coil;
+      add(GEO.orb, this.matGlow, 0, 2.46, -0.05);
+      add(GEO.crossV, this.matGlow, 0, 1.24, 0.23);
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
+    } else if (key === 'bloodbaron') {
+      const collarL = add(GEO.collar, this.matSecondary, -0.2, 1.72, -0.05);
+      collarL.rotation.z = 0.3;
+      const collarR = add(GEO.collar, this.matSecondary, 0.2, 1.72, -0.05);
+      collarR.rotation.z = -0.3;
+      add(GEO.cloak, this.matPrimary, 0, 1.22, -0.28);
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.26);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.26);
+      add(GEO.crossV, this.matAccent, 0, 1.24, 0.23);
+    } else if (key === 'gladiatorgold') {
+      const crest = add(GEO.plume, this.matAccent, 0, 2.3, 0);
+      crest.scale.set(1.6, 2, 1.4);
+      const pl = add(GEO.pauldron, this.matAccent, -0.52, 1.62, 0);
+      pl.scale.setScalar(1.3);
+      const pr = add(GEO.pauldron, this.matAccent, 0.52, 1.62, 0);
+      pr.scale.setScalar(1.3);
+      add(GEO.crossV, this.matSecondary, 0, 1.22, 0.235);
+      add(GEO.pommel, this.matAccent, 0, 1.0, 0.24).scale.setScalar(1.4);
+    } else if (key === 'shadowassassin') {
+      const scarf = add(GEO.strap, this.matDark, 0, 1.62, 0.02);
+      scarf.rotation.z = 1.5;
+      scarf.scale.set(2.4, 0.4, 1);
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.26);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.26);
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.32, 0);
+      hood.scale.set(1.05, 1.05, 1.05);
+    } else if (key === 'frostwarden') {
+      add(GEO.crown, this.matAccent, 0, 2.2, 0);
+      add(GEO.orb, this.matGlow, -0.3, 2.2, 0.1).scale.setScalar(0.7);
+      add(GEO.orb, this.matGlow, 0.3, 2.2, 0.1).scale.setScalar(0.7);
+      const cape = add(GEO.cloak, this.matSecondary, 0, 1.2, -0.28);
+      cape.scale.set(1.1, 1.05, 1);
+    } else if (key === 'emberchampion') {
+      for (let i = -1; i <= 1; i++) {
+        add(GEO.spike, this.matGlow, i * 0.13, 2.32 - Math.abs(i) * 0.08, 0).scale.set(0.8, 1.4 - Math.abs(i) * 0.3, 0.8);
+      }
+      add(GEO.crossV, this.matGlow, 0, 1.2, 0.235);
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.27);
+    } else if (key === 'stormsovereign') {
+      for (let i = 0; i < 3; i++) {
+        const sp = add(GEO.spike, this.matAccent, -0.18 + i * 0.18, 2.3, 0);
+        sp.rotation.z = (i - 1) * 0.4;
+        sp.scale.set(0.8, 1.5, 0.8);
+      }
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.27);
+    } else if (key === 'abyssal') {
+      for (let i = 0; i < 3; i++) {
+        const fin = add(GEO.jagged, this.matAccent, 0, 2.2 + i * 0.12, -0.1 - i * 0.06);
+        fin.rotation.x = -0.4;
+        fin.scale.set(0.6, 1 - i * 0.2, 0.6);
+      }
+      add(GEO.eye, this.matGlow, -0.1, 1.88, 0.26);
+      add(GEO.eye, this.matGlow, 0.1, 1.88, 0.26);
+      this.orbitGroup = new THREE.Group();
+      this.orbitGroup.position.y = 1.4;
+      const orb = new THREE.Mesh(GEO.orb, this.matGlow);
+      orb.scale.setScalar(1.4);
+      orb.position.x = 0.8;
+      this.orbitGroup.add(orb);
+      g.add(this.orbitGroup);
+    } else if (key === 'phoenix') {
+      const wingL = add(GEO.wingBig, this.matAccent, -0.55, 1.55, -0.25);
+      wingL.rotation.y = 0.5;
+      wingL.rotation.z = 0.45;
+      const wingR = add(GEO.wingBig, this.matAccent, 0.55, 1.55, -0.25);
+      wingR.rotation.y = -0.5;
+      wingR.rotation.z = -0.45;
+      for (let i = 0; i < 3; i++) {
+        add(GEO.spike, this.matGlow, (i - 1) * 0.12, 2.34 - Math.abs(i - 1) * 0.05, 0).scale.set(0.7, 1.3 - Math.abs(i - 1) * 0.25, 0.7);
+      }
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.27);
+    } else if (key === 'voidemperor') {
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        add(GEO.spike, this.matSecondary, Math.sin(a) * 0.2, 2.34, Math.cos(a) * 0.2).scale.set(0.9, 1.7, 0.9);
+      }
+      add(GEO.cloak, this.matPrimary, 0, 1.18, -0.29).scale.set(1.2, 1.2, 1);
+      add(GEO.eye, this.matGlow, -0.09, 1.87, 0.28);
+      add(GEO.eye, this.matGlow, 0.09, 1.87, 0.28);
+      this.orbitGroup = new THREE.Group();
+      this.orbitGroup.position.y = 1.45;
+      const orb = new THREE.Mesh(GEO.orb, this.matGlow);
+      orb.scale.setScalar(1.8);
+      orb.position.y = 0.3;
+      this.orbitGroup.add(orb);
+      g.add(this.orbitGroup);
+    } else if (key === 'titanbreaker') {
+      const rockL = add(GEO.pauldron, this.matSecondary, -0.55, 1.62, 0);
+      rockL.scale.set(1.8, 1.3, 1.4);
+      const rockR = add(GEO.pauldron, this.matSecondary, 0.55, 1.62, 0);
+      rockR.scale.set(1.8, 1.3, 1.4);
+      const hornL = add(GEO.spike, this.matAccent, -0.2, 2.2, 0.05);
+      hornL.rotation.z = 0.55;
+      hornL.scale.set(1.2, 1.6, 1.2);
+      const hornR = add(GEO.spike, this.matAccent, 0.2, 2.2, 0.05);
+      hornR.rotation.z = -0.55;
+      hornR.scale.set(1.2, 1.6, 1.2);
+      add(GEO.crossV, this.matGlow, 0, 1.2, 0.235);
+      add(GEO.crossH, this.matGlow, 0, 1.3, 0.235);
+    } else if (key === 'seraph') {
+      const halo = new THREE.Mesh(GEO.halo, this.matGlow);
+      halo.position.y = 2.56;
+      halo.rotation.x = Math.PI / 2;
+      this.torsoPivot.add(halo);
+      this.decorExtra = halo;
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 3; i++) {
+          const w = add(GEO.wingBig, this.matSecondary, side * (0.45 + i * 0.16), 1.7 - i * 0.18, -0.26 - i * 0.05);
+          w.rotation.y = side * (0.4 + i * 0.12);
+          w.rotation.z = side * (0.3 - i * 0.1);
+          w.scale.set(0.75 - i * 0.12, 1.05 - i * 0.15, 1);
+        }
+      }
+      add(GEO.crossV, this.matAccent, 0, 1.24, 0.235);
+    } else if (key === 'chaosoverlord') {
+      const hornL = add(GEO.spike, this.matSecondary, -0.18, 2.2, 0);
+      hornL.rotation.z = 0.8;
+      hornL.rotation.x = 0.3;
+      hornL.scale.set(1.3, 1.9, 1.3);
+      const hornR = add(GEO.spike, this.matSecondary, 0.18, 2.2, 0);
+      hornR.rotation.z = -0.8;
+      hornR.rotation.x = -0.3;
+      hornR.scale.set(1.3, 1.9, 1.3);
+      add(GEO.eye, this.matGlow, -0.09, 1.87, 0.27);
+      add(GEO.eye, this.matGlow, 0.09, 1.87, 0.27);
+      add(GEO.jagged, this.matGlow, -0.15, 1.2, 0.24).rotation.z = 0.4;
+      add(GEO.jagged, this.matGlow, 0.15, 1.14, 0.24).rotation.z = -0.4;
+      this.orbitGroup = new THREE.Group();
+      this.orbitGroup.position.y = 1.45;
+      const orb1 = new THREE.Mesh(GEO.orb, this.matGlow);
+      orb1.position.set(0.85, 0.2, 0);
+      const orb2 = new THREE.Mesh(GEO.orb, this.matGlow);
+      orb2.position.set(-0.85, -0.15, 0.2);
+      orb2.scale.setScalar(0.8);
+      this.orbitGroup.add(orb1, orb2);
+      g.add(this.orbitGroup);
+    } else if (key === 'fouiefury') {
+      const katanaBack = new THREE.Mesh(GEO.longblade, this.matBlade);
+      katanaBack.position.set(-0.3, 1.35, -0.3);
+      katanaBack.rotation.z = 2.4;
+      katanaBack.castShadow = true;
+      g.add(katanaBack);
+      add(GEO.strap, this.matDark, 0, 1.3, 0.05).rotation.z = 1.5;
+      const band = add(GEO.strap, this.matAccent, 0, 2.0, 0.02);
+      band.scale.set(1.3, 0.35, 1.2);
+      const tailL = add(GEO.strap, this.matAccent, -0.08, 1.9, -0.28);
+      tailL.rotation.x = 0.4;
+      tailL.scale.set(0.3, 1, 0.3);
+      const tailR = add(GEO.strap, this.matAccent, 0.08, 1.88, -0.28);
+      tailR.rotation.x = 0.5;
+      tailR.scale.set(0.3, 0.9, 0.3);
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.26);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.26);
+    } else if (key === 'prenpren') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.5, -0.03);
+      hood.scale.set(1.35, 1.4, 1.35);
+      add(GEO.mask, this.matDark, 0, 1.8, 0.27);
+      add(GEO.eye, this.matGlow, -0.09, 1.85, 0.31);
+      add(GEO.eye, this.matGlow, 0.09, 1.85, 0.31);
+      const cape1 = add(GEO.cloak, this.matSecondary, -0.14, 1.12, -0.3);
+      cape1.rotation.z = 0.12;
+      cape1.scale.set(0.75, 1.3, 1);
+      const cape2 = add(GEO.cloak, this.matPrimary, 0.16, 1.08, -0.31);
+      cape2.rotation.z = -0.1;
+      cape2.scale.set(0.7, 1.22, 1);
+      const collarL = add(GEO.collar, this.matSecondary, -0.22, 1.74, -0.04);
+      collarL.rotation.z = 0.35;
+      const collarR = add(GEO.collar, this.matSecondary, 0.22, 1.74, -0.04);
+      collarR.rotation.z = -0.35;
+      this.orbitGroup = new THREE.Group();
+      this.orbitGroup.position.y = 1.5;
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        const wisp = new THREE.Mesh(GEO.orb, this.matGlow);
+        wisp.position.set(Math.sin(a) * 0.95, Math.sin(i * 2.4) * 0.3, Math.cos(a) * 0.95);
+        wisp.scale.setScalar(0.8 + i * 0.15);
+        this.orbitGroup.add(wisp);
+      }
+      g.add(this.orbitGroup);
+    } else if (key === 'chronowarden') {
+      const halo = new THREE.Mesh(GEO.halo, this.matGlow);
+      halo.position.y = 2.54;
+      halo.rotation.x = Math.PI / 2;
+      this.torsoPivot.add(halo);
+      this.decorExtra = halo;
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.27);
+      this.orbitGroup = new THREE.Group();
+      this.orbitGroup.position.y = 1.5;
+      for (let i = 0; i < 2; i++) {
+        const orb = new THREE.Mesh(GEO.orb, this.matGlow);
+        orb.position.set(i === 0 ? 0.9 : -0.9, 0.1, 0);
+        this.orbitGroup.add(orb);
+      }
+      g.add(this.orbitGroup);
+    } else if (key === 'bloodmooncountess') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.4, -0.02);
+      hood.scale.set(1.2, 1.2, 1.2);
+      add(GEO.eye, this.matGlow, -0.09, 1.87, 0.28);
+      add(GEO.eye, this.matGlow, 0.09, 1.87, 0.28);
+      const collarL = add(GEO.collar, this.matSecondary, -0.22, 1.72, -0.04);
+      collarL.rotation.z = 0.35;
+      const collarR = add(GEO.collar, this.matSecondary, 0.22, 1.72, -0.04);
+      collarR.rotation.z = -0.35;
+      add(GEO.cloak, this.matPrimary, 0, 1.14, -0.3).scale.set(1.15, 1.25, 1);
+    } else if (key === 'worldbreaker') {
+      const rockL = add(GEO.pauldron, this.matSecondary, -0.58, 1.64, 0);
+      rockL.scale.set(2.0, 1.5, 1.5);
+      const rockR = add(GEO.pauldron, this.matSecondary, 0.58, 1.64, 0);
+      rockR.scale.set(2.0, 1.5, 1.5);
+      add(GEO.crossV, this.matGlow, 0, 1.18, 0.235);
+      add(GEO.crossH, this.matGlow, 0, 1.3, 0.235);
+      add(GEO.jagged, this.matGlow, -0.18, 1.05, 0.24).rotation.z = 0.5;
+      const hornL = add(GEO.spike, this.matSecondary, -0.22, 2.22, 0);
+      hornL.rotation.z = 0.7;
+      const hornR = add(GEO.spike, this.matSecondary, 0.22, 2.22, 0);
+      hornR.rotation.z = -0.7;
+    } else if (key === 'archangel') {
+      const halo = new THREE.Mesh(GEO.halo, this.matGlow);
+      halo.position.y = 2.6;
+      halo.rotation.x = Math.PI / 2;
+      this.torsoPivot.add(halo);
+      this.decorExtra = halo;
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 2; i++) {
+          const w = add(GEO.wingBig, this.matSecondary, side * (0.5 + i * 0.2), 1.75 - i * 0.22, -0.28 - i * 0.06);
+          w.rotation.y = side * (0.45 + i * 0.15);
+          w.rotation.z = side * (0.35 - i * 0.12);
+          w.scale.set(0.9 - i * 0.15, 1.25 - i * 0.2, 1);
+        }
+      }
+      add(GEO.crossV, this.matAccent, 0, 1.24, 0.235);
+    } else if (key === 'paladin') {
+      add(GEO.tabard, this.matSecondary, 0, 1.12, 0.235);
+      add(GEO.crossV, this.matAccent, 0, 1.18, 0.27);
+      add(GEO.helm, this.matSecondary, 0, 2.06, 0);
+      const pl = add(GEO.pauldron, this.matAccent, -0.52, 1.62, 0);
+      pl.scale.setScalar(1.25);
+      const pr = add(GEO.pauldron, this.matAccent, 0.52, 1.62, 0);
+      pr.scale.setScalar(1.25);
+    } else if (key === 'ronin') {
+      add(GEO.brim, this.matSecondary, 0, 2.1, 0);
+      add(GEO.strap, this.matSecondary, -0.1, 1.24, 0.22).rotation.z = 0.5;
+      const katanaBack = new THREE.Mesh(GEO.longblade, this.matBlade);
+      katanaBack.position.set(-0.3, 1.32, -0.3);
+      katanaBack.rotation.z = 2.4;
+      katanaBack.castShadow = true;
+      g.add(katanaBack);
+    } else if (key === 'dreadpirate') {
+      add(GEO.brim, this.matDark, 0, 2.14, 0);
+      add(GEO.eye, this.matGlow, 0.1, 1.88, 0.27).scale.setScalar(0.8);
+      add(GEO.cloak, this.matPrimary, 0, 1.2, -0.28);
+      add(GEO.strap, this.matSecondary, -0.1, 1.24, 0.22).rotation.z = 0.5;
+    } else if (key === 'plaguedoctor') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.34, -0.02);
+      hood.scale.set(1.1, 1.1, 1.1);
+      add(GEO.mask, this.matSecondary, 0, 1.82, 0.26).scale.set(0.8, 1.3, 0.8);
+      add(GEO.eye, this.matGlow, -0.08, 1.9, 0.28);
+      add(GEO.eye, this.matGlow, 0.08, 1.9, 0.28);
+      add(GEO.crossV, this.matGlow, 0, 1.22, 0.235);
+    } else if (key === 'oniwarrior') {
+      const hornL = add(GEO.spike, this.matAccent, -0.16, 2.16, 0.05);
+      hornL.rotation.z = 0.5;
+      hornL.scale.set(1.2, 1.7, 1.2);
+      const hornR = add(GEO.spike, this.matAccent, 0.16, 2.16, 0.05);
+      hornR.rotation.z = -0.5;
+      hornR.scale.set(1.2, 1.7, 1.2);
+      add(GEO.mask, this.matDark, 0, 1.84, 0.26);
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.28);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.28);
+      add(GEO.strap, this.matSecondary, 0.1, 1.24, 0.22).rotation.z = -0.5;
+    } else if (key === 'moonlitmaiden') {
+      const veil = add(GEO.hood, this.matSecondary, 0, 2.3, -0.04);
+      veil.scale.set(1.05, 0.9, 1.05);
+      add(GEO.eye, this.matGlow, -0.09, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.09, 1.88, 0.27);
+      const halo = new THREE.Mesh(GEO.halo, this.matGlow);
+      halo.position.y = 2.5;
+      halo.rotation.x = Math.PI / 2;
+      halo.scale.setScalar(0.8);
+      this.torsoPivot.add(halo);
+      this.decorExtra = halo;
+    } else if (key === 'scarletvale') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.34, -0.02);
+      hood.scale.set(1.05, 1.05, 1.05);
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
+      const rose = add(GEO.orb, this.matGlow, 0.2, 1.42, 0.24);
+      rose.scale.setScalar(0.7);
+      add(GEO.strap, this.matSecondary, -0.1, 1.26, 0.22).rotation.z = 0.5;
+    } else if (key === 'tempestrose') {
+      add(GEO.brim, this.matSecondary, 0, 2.1, 0).scale.setScalar(0.8);
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
+      const rose = add(GEO.orb, this.matGlow, -0.2, 1.42, 0.24);
+      rose.scale.setScalar(0.7);
+      add(GEO.cloak, this.matPrimary, 0, 1.22, -0.27).scale.set(0.75, 0.95, 1);
+    } else if (key === 'emberlily') {
+      for (let i = 0; i < 3; i++) {
+        add(GEO.spike, this.matGlow, (i - 1) * 0.1, 2.3 - Math.abs(i - 1) * 0.06, -0.02).scale.set(0.6, 1.1 - Math.abs(i - 1) * 0.25, 0.6);
+      }
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
+      const rose = add(GEO.orb, this.matGlow, 0.18, 1.44, 0.24);
+      rose.scale.setScalar(0.7);
+    } else if (key === 'frostlily') {
+      add(GEO.crown, this.matAccent, 0, 2.2, 0);
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
+      const rose = add(GEO.orb, this.matGlow, 0.18, 1.44, 0.24);
+      rose.scale.setScalar(0.7);
+      add(GEO.cloak, this.matSecondary, 0, 1.22, -0.27).scale.set(0.8, 0.95, 1);
+    } else if (key === 'violetenchantress') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.36, -0.02);
+      hood.scale.set(1.08, 1.08, 1.08);
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.28);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.28);
+      this.orbitGroup = new THREE.Group();
+      this.orbitGroup.position.y = 1.45;
+      const orb = new THREE.Mesh(GEO.orb, this.matGlow);
+      orb.position.x = 0.85;
+      orb.scale.setScalar(1.2);
+      this.orbitGroup.add(orb);
+      g.add(this.orbitGroup);
+    } else if (key === 'goldenempress') {
+      add(GEO.crown, this.matAccent, 0, 2.2, 0);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        add(GEO.spike, this.matAccent, Math.sin(a) * 0.22, 2.34, Math.cos(a) * 0.22).scale.setScalar(0.8);
+      }
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
+      add(GEO.cloak, this.matSecondary, 0, 1.2, -0.28).scale.set(1.05, 1.1, 1);
+    } else if (key === 'crimsonhuntress') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.34, -0.02);
+      hood.scale.set(1.08, 1.08, 1.08);
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.28);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.28);
+      add(GEO.quiver, this.matDark, 0.28, 1.4, -0.28).rotation.z = -0.45;
+      const rose = add(GEO.orb, this.matGlow, -0.18, 1.44, 0.24);
+      rose.scale.setScalar(0.7);
+    } else if (key === 'stormvalkyrie') {
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 2; i++) {
+          const w = add(GEO.wingBig, this.matSecondary, side * (0.48 + i * 0.18), 1.72 - i * 0.2, -0.27 - i * 0.05);
+          w.rotation.y = side * (0.42 + i * 0.14);
+          w.rotation.z = side * (0.32 - i * 0.1);
+          w.scale.set(0.7 - i * 0.1, 1.1 - i * 0.18, 1);
+        }
+      }
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
+    } else if (key === 'starweaver') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.36, -0.02);
+      hood.scale.set(1.1, 1.1, 1.1);
+      add(GEO.eye, this.matGlow, -0.08, 1.88, 0.28);
+      add(GEO.eye, this.matGlow, 0.08, 1.88, 0.28);
+      this.orbitGroup = new THREE.Group();
+      this.orbitGroup.position.y = 1.5;
+      for (let i = 0; i < 3; i++) {
+        const a = (i / 3) * Math.PI * 2;
+        const star = new THREE.Mesh(GEO.crystal, this.matGlow);
+        star.position.set(Math.sin(a) * 0.9, Math.sin(i * 2.2) * 0.25, Math.cos(a) * 0.9);
+        star.scale.setScalar(0.7);
+        this.orbitGroup.add(star);
+      }
+      g.add(this.orbitGroup);
     }
 
     if (g.children.length) {
@@ -363,23 +940,6 @@ export class CharacterRig {
     mesh.castShadow = true;
     pivot.add(mesh);
     return pivot;
-  }
-
-  buildSword() {
-    const s = new THREE.Group();
-    const blade = new THREE.Mesh(GEO.blade, this.matBlade);
-    blade.position.y = 0.68;
-    blade.castShadow = true;
-    const guard = new THREE.Mesh(GEO.guard, this.matAccent);
-    guard.position.y = 0.13;
-    const grip = new THREE.Mesh(GEO.grip, this.matDark);
-    grip.position.y = -0.03;
-    const pommel = new THREE.Mesh(GEO.pommel, this.matAccent);
-    pommel.position.y = -0.2;
-    s.add(blade, guard, grip, pommel);
-    s.rotation.x = 1.15;
-    this.armR.hand.add(s);
-    this.sword = s;
   }
 
   setYaw(yaw) {
@@ -509,21 +1069,21 @@ export class CharacterRig {
 
     const speedRatio = st.speedRatio || 0;
     const moving = speedRatio > 0.02 && st.grounded !== false;
-    if (moving) this.walkPhase += dt * (5 + 9 * speedRatio);
-
-    const swingAmp = moving ? Math.sin(this.walkPhase) * (0.45 + 0.35 * speedRatio) : 0;
-    let bob = moving ? Math.abs(Math.cos(this.walkPhase)) * 0.05 * speedRatio : 0;
+    if (moving) this.walkPhase += dt * (6 + 10 * speedRatio);
+    const runC = Math.min(speedRatio / 0.55, 1);
+    const swingAmp = moving ? Math.sin(this.walkPhase) * (0.55 + 0.45 * speedRatio) : 0;
+    let bob = moving ? Math.abs(Math.cos(this.walkPhase)) * (0.05 + 0.05 * runC) : 0;
     const breathe = Math.sin(this.time * 1.9) * 0.02;
 
-    let aLx = -swingAmp * 0.6;
-    let aLz = 0.09 + breathe;
-    let aRx = swingAmp * 0.6;
+    let aLx = moving ? -0.45 - swingAmp * 0.85 : -0.12 + breathe * 2.2;
+    let aLz = 0.12 + breathe;
+    let aRx = moving ? -0.45 + swingAmp * 0.5 - runC * 0.35 : -0.38 + breathe * 1.6;
     let aRy = 0;
-    let aRz = -(0.09 + breathe);
+    let aRz = -(0.16 + breathe);
     let legLx = swingAmp;
     let legRx = -swingAmp;
-    let leanX = speedRatio * 0.16;
-    let twistY = 0;
+    let leanX = speedRatio * (0.18 + 0.16 * runC);
+    let twistY = moving ? Math.sin(this.walkPhase) * 0.09 * speedRatio : 0;
 
     if (!st.grounded) {
       legLx = 0.5;

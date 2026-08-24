@@ -2,13 +2,15 @@ import { SKINS } from '../game/Skins.js';
 import { THEMES } from '../world/Themes.js';
 
 export class Menu {
-  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onSetName, onRandomName, onStartOver }) {
+  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onGetDiamonds, onSpendDiamonds, onSetName, onRandomName, onRedeem }) {
     this.onSettings = onSettings;
     this.onGetCoins = onGetCoins || (() => 0);
     this.onSpendCoins = onSpendCoins || (() => false);
+    this.onGetDiamonds = onGetDiamonds || (() => 0);
+    this.onSpendDiamonds = onSpendDiamonds || (() => false);
+    this.onRedeem = onRedeem || (() => ({ ok: false, msg: '' }));
     this.onSetName = onSetName || (() => {});
     this.onRandomName = onRandomName || (() => 'player');
-    this.onStartOver = onStartOver || (() => {});
     this.currentPanel = 'home';
     this.adModal = null;
     this.buyModal = null;
@@ -16,22 +18,7 @@ export class Menu {
 
     this.root = document.createElement('div');
     this.root.id = 'menu';
-    const unlocked = this.getUnlocked();
-    const skinCards = Object.entries(SKINS)
-      .map(([id, s]) => {
-        const p = `#${s.primary.toString(16).padStart(6, '0')}`;
-        const a = `#${s.accent.toString(16).padStart(6, '0')}`;
-        const locked = (s.premium || s.price) && !unlocked.includes(id);
-        const tag = s.premium ? '<span class="ad-tag">AD</span>' : s.price ? `<span class="ad-tag buy">${Number(s.price).toLocaleString()}</span>` : '';
-        return `
-          <button class="skin-card${locked ? ' locked' : ''}" data-skin="${id}">
-            <span class="skin-chip" style="background:linear-gradient(135deg,${p} 55%,${a})"></span>
-            <span class="skin-name">${s.name}</span>
-            <span class="skin-desc">${locked ? (s.premium ? 'LOCKED &mdash; watch ad to unlock' : `BUY &mdash; ${Number(s.price).toLocaleString()} coins`) : s.desc}</span>
-            ${locked ? tag : ''}
-          </button>`;
-      })
-      .join('');
+    this.shopFilter = 'all';
     const mapCards = Object.entries(THEMES)
       .map(([id, t]) => {
         const s1 = `#${t.sky.toString(16).padStart(6, '0')}`;
@@ -66,9 +53,16 @@ export class Menu {
         <div class="menu-panel" id="panel-skins" style="display:none">
           <div class="panel-title small">CHOOSE YOUR KNIGHT</div>
           <div class="coins-chip" id="coins-chip"></div>
+          <div class="shop-cats" id="shop-cats"></div>
           <div class="skin-hint">Your knight stands in the center &mdash; pick a skin and watch it change live. Earn coins with kills!</div>
           <div id="skin-action"></div>
-          <div class="skin-grid" id="skin-grid">${skinCards}</div>
+          <div class="skin-scroll">
+            <div class="skin-arrows">
+              <button class="skin-arrow" id="skin-prev">&uarr;</button>
+              <button class="skin-arrow" id="skin-next">&darr;</button>
+            </div>
+            <div class="skin-grid" id="skin-grid"></div>
+          </div>
           <button class="menu-btn small" id="btn-back-3">BACK</button>
         </div>
 
@@ -95,6 +89,12 @@ export class Menu {
             <label>Shadows</label>
             <input type="checkbox" id="set-shadows" checked />
           </div>
+          <div class="setting-row">
+            <label>Promocode</label>
+            <input type="text" id="promo-input" placeholder="Enter code" autocomplete="off" />
+            <button class="menu-btn tiny" id="btn-redeem">REDEEM</button>
+          </div>
+          <div class="ad-status" id="promo-status"></div>
           <button class="menu-btn small" id="btn-back-1">BACK</button>
         </div>
 
@@ -129,8 +129,17 @@ export class Menu {
 
     const $ = (id) => this.root.querySelector(`#${id}`);
 
-    $('btn-play').addEventListener('click', () => onPlay());
-    $('btn-random').addEventListener('click', () => this.showServerLoading(onStartRandom));
+    $('btn-play').addEventListener('click', () => {
+      this.showServerLoading(
+        onPlay,
+        3000,
+        'PREPARING SERVER',
+        'Finding queue players...'
+      );
+    });
+    $('btn-random').addEventListener('click', () => {
+      this.showServerLoading(onStartRandom, 2000 + Math.random() * 1000);
+    });
     $('btn-skins').addEventListener('click', () => this.showPanel('skins'));
     $('btn-maps').addEventListener('click', () => this.showPanel('maps'));
     $('btn-settings').addEventListener('click', () => this.showPanel('settings'));
@@ -155,8 +164,35 @@ export class Menu {
         this.previewLockedSkin(btn.dataset.skin);
         return;
       }
+      this.hideSkinAction();
       this.selectSkin(btn.dataset.skin);
       this.onSettings({ skin: btn.dataset.skin });
+    });
+
+    const cats = [
+      ['all', 'ALL'],
+      ['owned', 'OWNED'],
+      ['free', 'FREE'],
+      ['ads', 'ADS SKIN'],
+      ['purchasable', 'PURCHASABLE']
+    ];
+    this.shopCats = $('shop-cats');
+    this.shopCats.innerHTML = cats
+      .map(([id, label]) => `<button class="shop-cat" data-cat="${id}">${label}</button>`)
+      .join('');
+    this.shopCats.addEventListener('click', (e) => {
+      const btn = e.target.closest('.shop-cat');
+      if (!btn) return;
+      this.shopFilter = btn.dataset.cat;
+      this.renderSkinGrid();
+    });
+    this.renderSkinGrid();
+
+    $('skin-prev').addEventListener('click', () => {
+      this.skinGrid.scrollBy({ top: -320, behavior: 'smooth' });
+    });
+    $('skin-next').addEventListener('click', () => {
+      this.skinGrid.scrollBy({ top: 320, behavior: 'smooth' });
     });
 
     this.mapGrid = $('map-grid');
@@ -180,18 +216,31 @@ export class Menu {
     $('set-shadows').addEventListener('change', (e) => {
       this.onSettings({ shadows: e.target.checked });
     });
+
+    const promoInput = $('promo-input');
+    const promoStatus = $('promo-status');
+    const doRedeem = () => {
+      const res = this.onRedeem(promoInput.value);
+      promoStatus.textContent = res.msg || '';
+      promoStatus.style.color = res.ok ? '#9dff7a' : '#ff8a7a';
+      if (res.ok) promoInput.value = '';
+    };
+    $('btn-redeem').addEventListener('click', doRedeem);
+    promoInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') doRedeem();
+    });
   }
 
-  showServerLoading(onDone) {
+  showServerLoading(onDone, ms = 2500, title = 'FINDING SERVER', status = 'Searching nearby matches...') {
     if (this.serverLoading) return;
     const ov = document.createElement('div');
     ov.id = 'server-loading';
     const dots = [0, 1, 2].map(() => '<span class="load-dot"></span>').join('');
     ov.innerHTML = `
       <div class="load-card">
-        <div class="load-title">FINDING SERVER</div>
+        <div class="load-title">${title}</div>
         <div class="load-dots">${dots}</div>
-        <div class="load-status">Searching nearby matches...</div>
+        <div class="load-status">${status}</div>
       </div>`;
     document.body.appendChild(ov);
     this.serverLoading = ov;
@@ -199,7 +248,7 @@ export class Menu {
       ov.remove();
       this.serverLoading = null;
       onDone();
-    }, 2000 + Math.random() * 1000);
+    }, ms);
   }
 
   getUnlocked() {
@@ -211,20 +260,67 @@ export class Menu {
     }
   }
 
+  renderSkinGrid() {
+    if (!this.skinGrid) return;
+    const unlocked = this.getUnlocked();
+    const filter = this.shopFilter;
+    const cards = Object.entries(SKINS)
+      .filter(([id, s]) => {
+        const owned = unlocked.includes(id);
+        switch (filter) {
+          case 'owned': return owned;
+          case 'free': return s.rarity === 'free';
+          case 'ads': return !!s.premium;
+          case 'purchasable': return !!s.price || !!s.priceD;
+          default: return true;
+        }
+      })
+      .map(([id, s]) => {
+        const p = `#${s.primary.toString(16).padStart(6, '0')}`;
+        const a = `#${s.accent.toString(16).padStart(6, '0')}`;
+        const locked = (s.premium || s.price || s.priceD) && !unlocked.includes(id);
+        const rarity = (s.rarity || 'free').toUpperCase();
+        const priceTxt = s.premium
+          ? null
+          : s.priceD
+            ? `${Number(s.priceD).toLocaleString()} ◆`
+            : `${Number(s.price).toLocaleString()} coins`;
+        const tag = s.premium
+          ? '<span class="ad-tag">AD</span>'
+          : priceTxt
+            ? `<span class="ad-tag buy">${priceTxt}</span>`
+            : '';
+        const desc = locked
+          ? s.premium
+            ? 'LOCKED — watch ad to unlock'
+            : `BUY — ${priceTxt}`
+          : s.desc;
+        return `
+          <button class="skin-card r-${s.rarity || 'free'}${locked ? ' locked' : ''}" data-skin="${id}">
+            <span class="rarity-tag">${rarity}</span>
+            <span class="skin-chip" style="background:linear-gradient(135deg,${p} 55%,${a})"></span>
+            <span class="skin-name">${s.name}</span>
+            <span class="skin-desc">${desc}</span>
+            ${locked ? tag : ''}
+          </button>`;
+      })
+      .join('');
+    this.skinGrid.innerHTML = cards || '<div class="srv-status">Nothing here yet.</div>';
+    const current = this.lastAppliedSkin || 'knight';
+    for (const card of this.skinGrid.querySelectorAll('.skin-card')) {
+      const isLocked = card.classList.contains('locked');
+      card.classList.toggle('sel', !isLocked && card.dataset.skin === current);
+    }
+  }
+
   unlockSkin(id) {
     const u = this.getUnlocked();
     if (!u.includes(id)) {
       u.push(id);
       try { localStorage.setItem('fba-unlocked-skins', JSON.stringify(u)); } catch (e) { /* ignore */ }
     }
-    const card = this.skinGrid.querySelector(`[data-skin="${id}"]`);
-    if (card) {
-      card.classList.remove('locked');
-      const d = card.querySelector('.skin-desc');
-      if (d) d.textContent = SKINS[id].desc;
-      const tag = card.querySelector('.ad-tag');
-      if (tag) tag.remove();
-    }
+    this.renderSkinGrid();
+    this.refreshCoins();
   }
 
   pushAd(ins) {
@@ -342,25 +438,39 @@ export class Menu {
     $('panel-maps').style.display = which === 'maps' ? 'block' : 'none';
     $('panel-settings').style.display = which === 'settings' ? 'block' : 'none';
     $('panel-controls').style.display = which === 'controls' ? 'block' : 'none';
-    if (which === 'skins') this.refreshCoins();
+    if (which === 'skins') {
+      this.refreshCoins();
+      this.renderSkinGrid();
+      for (const btn of this.shopCats.querySelectorAll('.shop-cat')) {
+        btn.classList.toggle('sel', btn.dataset.cat === this.shopFilter);
+      }
+    }
   }
 
   refreshCoins() {
     const chip = this.root.querySelector('#coins-chip');
-    if (chip) chip.textContent = `YOUR COINS: ${Number(this.onGetCoins() || 0).toLocaleString()}`;
+    if (chip) {
+      const coins = Number(this.onGetCoins() || 0).toLocaleString();
+      const dias = Number(this.onGetDiamonds() || 0).toLocaleString();
+      chip.textContent = `COINS: ${coins}  \u25c6 ${dias}`;
+    }
   }
 
   showBuyModal(skinId) {
     if (this.buyModal) return;
     const s = SKINS[skinId];
     if (!s) return;
+    const useDia = !!s.priceD;
+    const price = useDia ? s.priceD : s.price;
+    const curName = useDia ? 'DIAMONDS' : 'COINS';
+    const bal = Number((useDia ? this.onGetDiamonds() : this.onGetCoins()) || 0);
     const ov = document.createElement('div');
     ov.id = 'buy-modal';
     ov.innerHTML = `
       <div class="ad-card">
         <div class="ad-title">${s.name.toUpperCase()}</div>
         <div class="ad-sub">${s.desc}</div>
-        <div class="buy-price">${Number(s.price).toLocaleString()} COINS</div>
+        <div class="buy-price ${useDia ? 'dia' : ''}">${Number(price).toLocaleString()} ${curName}</div>
         <div class="ad-status" id="buy-status"></div>
         <div class="srv-actions">
           <button class="menu-btn small" id="buy-confirm">BUY</button>
@@ -372,10 +482,9 @@ export class Menu {
 
     const st = ov.querySelector('#buy-status');
     const updateStatus = (msg, bad) => {
-      const bal = Number(this.onGetCoins() || 0);
-      const need = Math.max(0, s.price - bal);
+      const need = Math.max(0, price - bal);
       st.style.color = bad ? '#ff8a7a' : '#e8e2d5';
-      st.textContent = msg || `Balance: ${bal.toLocaleString()} / ${s.price.toLocaleString()}` + (need > 0 ? ` — need ${need.toLocaleString()} more (50 per kill)` : ' — you can afford this!');
+      st.textContent = msg || `Balance: ${bal.toLocaleString()} / ${price.toLocaleString()} ${curName}` + (need > 0 ? ` — need ${need.toLocaleString()} more` : ' — you can afford this!');
     };
     updateStatus();
 
@@ -384,15 +493,17 @@ export class Menu {
       this.buyModal = null;
     });
     ov.querySelector('#buy-confirm').addEventListener('click', () => {
-      if (this.onSpendCoins(s.price)) {
+      const ok = useDia ? this.onSpendDiamonds(s.priceD) : this.onSpendCoins(s.price);
+      if (ok) {
         this.unlockSkin(skinId);
         ov.remove();
         this.buyModal = null;
         this.refreshCoins();
+        this.hideSkinAction();
         this.selectSkin(skinId);
         this.onSettings({ skin: skinId });
       } else {
-        updateStatus('Not enough coins! Kill knights — 50 coins each.', true);
+        updateStatus(useDia ? 'Not enough diamonds! Collect glowing diamonds in the arena.' : 'Not enough coins! Kill knights — 20 coins each.', true);
       }
     });
   }
@@ -411,7 +522,7 @@ export class Menu {
     this.selectMap(s.map || 'citadel');
   }
 
-  showResults(rows, onStartOver) {
+  showResults(rows) {
     if (this.resultsEl) return;
     const medals = ['#ffd700', '#c8ccd4', '#cd8f4a'];
     const places = [
@@ -439,13 +550,12 @@ export class Menu {
             })
             .join('')}
         </div>
-        <button class="menu-btn" id="btn-start-over">START OVER</button>
+        <button class="menu-btn" id="btn-start-over">BACK TO MENU</button>
       </div>`;
     document.body.appendChild(ov);
     this.resultsEl = ov;
     ov.querySelector('#btn-start-over').addEventListener('click', () => {
-      this.hideResults();
-      onStartOver();
+      location.reload();
     });
   }
 

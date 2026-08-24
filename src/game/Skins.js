@@ -1,72 +1,63 @@
 export const SKINS = {
-  knight: {
-    name: 'Knight', desc: 'Stalwart guard of the arena',
-    primary: 0x3560c0, secondary: 0x8a93a6, accent: 0xd8a02a,
-    decor: 'knight', bladeGlow: 0
-  },
-  crusader: {
-    name: 'Crusader', desc: 'Holy warrior in heavy plate',
-    primary: 0xa03030, secondary: 0xd8d3c8, accent: 0xc9a227,
-    decor: 'crusader', bladeGlow: 0
-  },
-  ranger: {
-    name: 'Ranger', desc: 'Swift hunter of the wilds',
-    primary: 0x3f7a44, secondary: 0x6b5334, accent: 0xb0c48a,
-    decor: 'ranger', bladeGlow: 0
-  },
-  royal: {
-    name: 'Royal', desc: 'Crowned champion of the realm',
-    primary: 0x6b3fa0, secondary: 0xc9a227, accent: 0xe8d8a8,
-    decor: 'royal', bladeGlow: 0xd8a02a
-  },
-  shadow: {
-    name: 'Shadow', desc: 'Silent blade from the void',
-    primary: 0x23232e, secondary: 0x3d3d52, accent: 0x8a2be2,
-    decor: 'shadow', bladeGlow: 0x8a2be2
-  },
-  dragonlord: {
-    name: 'Dragonlord', desc: 'Bonded to an ancient dragon',
-    primary: 0x8a1a1a, secondary: 0x3a3a44, accent: 0xffb020,
-    decor: 'dragon', bladeGlow: 0xff5522, premium: true
-  },
-  voidreaper: {
-    name: 'Void Reaper', desc: 'Harvested from the void itself',
-    primary: 0x16121f, secondary: 0x2a2438, accent: 0x8a2be2,
-    decor: 'reaper', bladeGlow: 0x8a2be2, premium: true
-  },
-  frostking: {
-    name: 'Frost King', desc: 'Crowned in eternal winter',
-    primary: 0x9fd4e8, secondary: 0xd8ecf4, accent: 0x4aa8d8,
-    decor: 'frostking', bladeGlow: 0x66d9ff, premium: true
-  },
-  warlord: {
-    name: 'Warlord', desc: 'Conqueror of a hundred arenas',
-    primary: 0x5a1f1f, secondary: 0x2a2a30, accent: 0xc9a227,
-    decor: 'warlord', bladeGlow: 0xffaa33, price: 1000,
-    aura: { colors: [0xffcc66, 0xff8833], every: 0.5, count: 2, up: 0.8, grav: -1 }
-  },
-  stormcaller: {
-    name: 'Storm Caller', desc: 'Wielder of the living thunder',
-    primary: 0x1f3a6e, secondary: 0x8a93a6, accent: 0x66ccff,
-    decor: 'storm', bladeGlow: 0x66ccff, price: 2000,
-    aura: { colors: [0x9fdcff, 0x66ccff, 0xffffff], every: 0.25, count: 3, up: 1.2, grav: -1 }
-  },
-  inferno: {
-    name: 'Inferno Knight', desc: 'Armored in everburning flame',
-    primary: 0x3a1408, secondary: 0x7a2a10, accent: 0xff6a1a,
-    decor: 'inferno', bladeGlow: 0xff4400, price: 5000,
-    aura: { colors: [0xff6a1a, 0xffaa22, 0xff3300], every: 0.1, count: 3, up: 1.6, grav: -3 }
-  },
-  celestial: {
-    name: 'Celestial Guardian', desc: 'Sentinel of the heavens',
-    primary: 0xe8e4d4, secondary: 0xc9a227, accent: 0xfff2c0,
-    decor: 'celestial', bladeGlow: 0xffe9a8, price: 50000,
-    aura: { colors: [0xfff2c0, 0xffe9a8, 0xffffff], every: 0.12, count: 3, up: 1.8, grav: -0.5 }
-  },
-  cosmic: {
-    name: 'Cosmic Devourer', desc: 'MYTHICAL - eater of worlds',
-    primary: 0x14082a, secondary: 0x3a1a5e, accent: 0xb266ff,
-    decor: 'cosmic', bladeGlow: 0x9933ff, price: 1000000,
-    aura: { colors: [0xb266ff, 0x66ccff, 0xff66b8, 0xffffff], every: 0.07, count: 4, up: 1.4, grav: -0.8 }
-  }
+  knight: { name: 'Knight', desc: 'Stalwart guard of the arena', primary: 0x3560c0, secondary: 0x8a93a6, accent: 0xd8a02a, decor: 'knight', blade: 'sword', bladeGlow: 0, rarity: 'free' },
+  crusader: { name: 'Crusader', desc: 'Holy warrior in heavy plate', primary: 0xa03030, secondary: 0xd8d3c8, accent: 0xc9a227, decor: 'crusader', blade: 'sword', bladeGlow: 0, rarity: 'free' },
+  ranger: { name: 'Ranger', desc: 'Swift hunter of the wilds', primary: 0x3f7a44, secondary: 0x6b5334, accent: 0xb0c48a, decor: 'ranger', blade: 'sword', bladeGlow: 0, rarity: 'free' },
+  royal: { name: 'Royal', desc: 'Crowned champion of the realm', primary: 0x6b3fa0, secondary: 0xc9a227, accent: 0xe8d8a8, decor: 'royal', blade: 'sword', bladeGlow: 0, rarity: 'free' },
+  shadow: { name: 'Shadow', desc: 'Silent blade from the void', primary: 0x23232e, secondary: 0x3d3d52, accent: 0x8a2be2, decor: 'shadow', blade: 'sword', bladeGlow: 0x8a2be2, rarity: 'free' },
+
+  dragonlord: { name: 'Dragonlord', desc: 'Bonded to an ancient dragon', primary: 0x8a1a1a, secondary: 0x3a3a44, accent: 0xffb020, decor: 'dragon', blade: 'sword', bladeGlow: 0xff5522, rarity: 'ad', premium: true },
+  voidreaper: { name: 'Void Reaper', desc: 'Harvested from the void itself', primary: 0x16121f, secondary: 0x2a2438, accent: 0x8a2be2, decor: 'reaper', blade: 'sword', bladeGlow: 0x8a2be2, rarity: 'ad', premium: true },
+  frostking: { name: 'Frost King', desc: 'Crowned in eternal winter', primary: 0x9fd4e8, secondary: 0xd8ecf4, accent: 0x4aa8d8, decor: 'frostking', blade: 'sword', bladeGlow: 0x66d9ff, rarity: 'ad', premium: true },
+
+  squire: { name: 'Squire', desc: 'Trainee of the arena grounds', primary: 0x7a5c3a, secondary: 0x5a4630, accent: 0x9a8a6a, decor: 'squire', blade: 'sword', rarity: 'common', price: 150 },
+  mercenary: { name: 'Mercenary', desc: 'Fights for coin, dies for none', primary: 0x4a4a42, secondary: 0x6a5a3a, accent: 0x8a7a4a, decor: 'mercenary', blade: 'sword', rarity: 'common', price: 300 },
+  pikeman: { name: 'Pikeman', desc: 'Line holder of the old guard', primary: 0x3a4a5a, secondary: 0x5a6a7a, accent: 0x8a9aaa, decor: 'pikeman', blade: 'sword', rarity: 'common', price: 450 },
+  archerguard: { name: 'Archer Guard', desc: 'Keeps the walls safe at dusk', primary: 0x4a5a34, secondary: 0x6a5a3a, accent: 0x8a9a5a, decor: 'archerguard', blade: 'sword', rarity: 'common', price: 650 },
+  ironclad: { name: 'Ironclad', desc: 'Slabs of iron, zero fear', primary: 0x5a5a62, secondary: 0x3a3a42, accent: 0x7a7a82, decor: 'ironclad', blade: 'sword', rarity: 'common', price: 1000 },
+
+  crimsonduelist: { name: 'Crimson Duelist', desc: 'One blade, one chance', primary: 0x8a1a2a, secondary: 0xd8d3c8, accent: 0xe0a0a0, decor: 'duelist', blade: 'sword', bladeGlow: 0xff3344, rarity: 'rare', price: 1500, aura: { colors: [0xff3344], every: 0.5, count: 1, up: 0.8, grav: -1 } },
+  venomacolyte: { name: 'Venom Acolyte', desc: 'Chanting in the toxic depths', primary: 0x1e3a1a, secondary: 0x2a4a26, accent: 0x66ff66, decor: 'venom', blade: 'sword', bladeGlow: 0x66ff66, rarity: 'rare', price: 3000, aura: { colors: [0x66ff66, 0x33cc44], every: 0.4, count: 2, up: 0.6, grav: -0.5 } },
+  sandreaper: { name: 'Sand Reaper', desc: 'Walks where dunes bury kings', primary: 0xc8a86a, secondary: 0x8a6a3a, accent: 0xe8d8a8, decor: 'sandreaper', blade: 'sword', rarity: 'rare', price: 5000, aura: { colors: [0xe8d8a8, 0xc8a86a], every: 0.45, count: 2, up: 0.9, grav: -1.5 } },
+  thunderguard: { name: 'Thunder Guard', desc: 'Static runs through his veins', primary: 0x2a3a5a, secondary: 0x4a5a7a, accent: 0x9fdcff, decor: 'thunderguard', blade: 'sword', bladeGlow: 0x9fdcff, rarity: 'rare', price: 7500, aura: { colors: [0x9fdcff, 0xffffff], every: 0.35, count: 2, up: 1, grav: -1 } },
+  bloodbaron: { name: 'Blood Baron', desc: 'Nobility fed on crimson', primary: 0x2a0a12, secondary: 0x5a1020, accent: 0xc02040, decor: 'bloodbaron', blade: 'sword', bladeGlow: 0xff2244, rarity: 'rare', price: 10000, aura: { colors: [0xff2244, 0x881122], every: 0.4, count: 2, up: 0.7, grav: -0.8 } },
+
+  gladiatorgold: { name: 'Golden Gladiator', desc: 'Champion of the golden games', primary: 0xc9a227, secondary: 0x8a6a1a, accent: 0xffe08a, decor: 'gladiatorgold', blade: 'sword', bladeGlow: 0xffd76a, rarity: 'legendary', price: 20000, aura: { colors: [0xffd76a, 0xffe9a8], every: 0.25, count: 3, up: 1.2, grav: -0.6 } },
+  shadowassassin: { name: 'Shadow Assassin', desc: 'You never saw the second blade', primary: 0x101018, secondary: 0x1f1f2e, accent: 0x5566ff, decor: 'shadowassassin', blade: 'sword', bladeGlow: 0x5566ff, rarity: 'legendary', price: 28000, aura: { colors: [0x33334a, 0x1a1a2a, 0x5566ff], every: 0.2, count: 3, up: 0.4, grav: 0 } },
+  frostwarden: { name: 'Frost Warden', desc: 'Winter answers to him alone', primary: 0x9fd4e8, secondary: 0x5a8ab4, accent: 0xd8f2ff, decor: 'frostwarden', blade: 'sword', bladeGlow: 0x9fdcff, rarity: 'legendary', price: 35000, aura: { colors: [0xd8f2ff, 0x9fdcff, 0xffffff], every: 0.18, count: 3, up: 1, grav: -1.2 } },
+  emberchampion: { name: 'Ember Champion', desc: 'Forged in the heart of a volcano', primary: 0x3a1408, secondary: 0x8a2a0a, accent: 0xff8a2a, decor: 'emberchampion', blade: 'sword', bladeGlow: 0xff5500, rarity: 'legendary', price: 42000, aura: { colors: [0xff8a2a, 0xff5500, 0xffbb44], every: 0.15, count: 3, up: 1.5, grav: -2.5 } },
+  stormsovereign: { name: 'Storm Sovereign', desc: 'The sky kneels to his crown', primary: 0x1a2a4a, secondary: 0x2a4a7a, accent: 0xffe14d, decor: 'stormsovereign', blade: 'sword', bladeGlow: 0xffe14d, rarity: 'legendary', price: 50000, aura: { colors: [0xffe14d, 0x9fdcff, 0xffffff], every: 0.14, count: 3, up: 1.4, grav: -1 } },
+
+  abyssal: { name: 'Abyssal Leviathan', desc: 'Risen from the drowning deep', primary: 0x0a2a3a, secondary: 0x1a4a5a, accent: 0x2ae0d8, decor: 'abyssal', blade: 'trident', bladeGlow: 0x2ae0d8, rarity: 'mythical', price: 70000, aura: { colors: [0x2ae0d8, 0x1a8ab4, 0xafffff], every: 0.12, count: 3, up: 1.1, grav: -0.8 } },
+  solarphoenix: { name: 'Solar Phoenix', desc: 'Reborn from the sun itself', primary: 0x8a2a0a, secondary: 0xff7a1a, accent: 0xffd76a, decor: 'phoenix', blade: 'sword', bladeGlow: 0xff7711, rarity: 'mythical', price: 100000, aura: { colors: [0xff7a1a, 0xffd76a, 0xff3300], every: 0.09, count: 4, up: 1.8, grav: -2 } },
+  voidemperor: { name: 'Void Emperor', desc: 'Thrones crumble in his orbit', primary: 0x14082a, secondary: 0x2a1a4a, accent: 0x9933ff, decor: 'voidemperor', blade: 'beam', bladeGlow: 0x9933ff, rarity: 'mythical', price: 150000, aura: { colors: [0x9933ff, 0x6622cc, 0xff66ff], every: 0.1, count: 3, up: 0.9, grav: -0.4 } },
+
+  titanbreaker: { name: 'Titan Breaker', desc: 'Shatters mountains for sport', primary: 0x4a3a2a, secondary: 0x8a4a1a, accent: 0xff7722, decor: 'titanbreaker', blade: 'hammer', bladeGlow: 0xff7722, rarity: 'godly', price: 200000, aura: { colors: [0xff7722, 0xffaa22, 0xff4411], every: 0.09, count: 4, up: 1.6, grav: -2.2 } },
+  seraph: { name: 'Divine Seraph', desc: 'Six wings of pure judgment', primary: 0xf0ead4, secondary: 0xd8b84a, accent: 0xfff8d8, decor: 'seraph', blade: 'beam', bladeGlow: 0xfff2c0, rarity: 'godly', price: 320000, aura: { colors: [0xfff8d8, 0xffe9a8, 0xffffff], every: 0.08, count: 4, up: 2, grav: -0.3 } },
+  chaosoverlord: { name: 'Chaos Overlord', desc: 'Order dies where he steps', primary: 0x1a0a1e, secondary: 0x4a1030, accent: 0xff2266, decor: 'chaosoverlord', blade: 'beam', bladeGlow: 0xff2266, rarity: 'godly', price: 500000, aura: { colors: [0xff2266, 0x9933ff, 0x22ccff], every: 0.07, count: 4, up: 1.5, grav: -0.5 } },
+
+  fouiefury: { name: 'Fouie Fury', desc: 'AZURE — ninja of the creator', primary: 0x0a1220, secondary: 0x1a3a5c, accent: 0x33ccff, decor: 'fouiefury', blade: 'katana', bladeGlow: 0x44ddff, rarity: 'azure', price: 1000000, aura: { colors: [0x44ddff, 0x88eeff, 0x2266ff, 0xffffff], every: 0.06, count: 5, up: 1.6, grav: -0.6 } },
+  prenpren: { name: 'PrenPren', desc: 'AZURE — death reaper of souls', primary: 0x06080f, secondary: 0x0e1a2e, accent: 0x2a7aff, decor: 'prenpren', blade: 'scythe', bladeGlow: 0x2a7aff, rarity: 'azure', price: 50000000, aura: { colors: [0x2a7aff, 0x66aaff, 0x113366, 0xaaddff], every: 0.05, count: 5, up: 1.2, grav: -0.4 } },
+
+  chronowarden: { name: 'Chrono Warden', desc: 'Guards every second of history', primary: 0x1a2a2a, secondary: 0x3a5a5a, accent: 0x7affd8, decor: 'chronowarden', blade: 'beam', bladeGlow: 0x7affd8, rarity: 'mythical', price: 80000, aura: { colors: [0x7affd8, 0xffe9a8, 0xffffff], every: 0.11, count: 3, up: 1.2, grav: -0.5 } },
+  bloodmooncountess: { name: 'Blood Moon Countess', desc: 'Feeds only under the red moon', primary: 0x1a0508, secondary: 0x4a0a14, accent: 0xff2a3c, decor: 'bloodmooncountess', blade: 'scythe', bladeGlow: 0xff2a3c, rarity: 'mythical', price: 120000, aura: { colors: [0xff2a3c, 0x8a0a14, 0xff8899], every: 0.1, count: 3, up: 1, grav: -0.6 } },
+
+  worldbreaker: { name: 'Worldbreaker', desc: 'One swing rewrites maps', primary: 0x2a1a12, secondary: 0x6a2a0a, accent: 0xff5511, decor: 'worldbreaker', blade: 'hammer', bladeGlow: 0xff5511, rarity: 'godly', price: 250000, aura: { colors: [0xff5511, 0xffaa22, 0x882200], every: 0.08, count: 5, up: 1.8, grav: -2.5 } },
+  archangel: { name: 'Archangel', desc: 'The final word of judgment', primary: 0xf8f4e0, secondary: 0xc9a227, accent: 0xffffff, decor: 'archangel', blade: 'beam', bladeGlow: 0xfff8d8, rarity: 'godly', price: 450000, aura: { colors: [0xffffff, 0xffe9a8, 0xfff8d8], every: 0.06, count: 5, up: 2.2, grav: -0.2 } },
+
+  paladin: { name: 'Paladin', desc: 'Sworn shield of the light', primary: 0xd8d3c8, secondary: 0xc9a227, accent: 0xfff2c0, decor: 'paladin', blade: 'sword', rarity: 'ad', premium: true },
+  ronin: { name: 'Ronin', desc: 'A masterless blade wanders', primary: 0x4a3a2a, secondary: 0x8a7a5a, accent: 0xc9a227, decor: 'ronin', blade: 'katana', rarity: 'ad', premium: true },
+  dreadpirate: { name: 'Dread Pirate', desc: 'Terror of the salt seas', primary: 0x1a2a3a, secondary: 0x8a1a1a, accent: 0xc9a227, decor: 'dreadpirate', blade: 'sword', rarity: 'ad', premium: true },
+  plaguedoctor: { name: 'Plague Doctor', desc: 'The cure is... more blades', primary: 0x1a1a22, secondary: 0x3a3a2a, accent: 0x88ff44, decor: 'plaguedoctor', blade: 'sword', bladeGlow: 0x88ff44, rarity: 'ad', premium: true },
+  oniwarrior: { name: 'Oni Warrior', desc: 'Demon blood, iron will', primary: 0x5a1a1a, secondary: 0x2a0a0a, accent: 0xff4444, decor: 'oniwarrior', blade: 'katana', bladeGlow: 0xff4444, rarity: 'ad', premium: true },
+
+  moonlitmaiden: { name: 'Moonlit Maiden', desc: 'EXOTIC — daughter of the moon', primary: 0x2a3a5e, secondary: 0xbfe0ff, accent: 0xe8f4ff, decor: 'moonlitmaiden', blade: 'beam', bladeGlow: 0xbfe0ff, rarity: 'exotic', female: true, priceD: 50, aura: { colors: [0xbfe0ff, 0xe8f4ff, 0x8fb4ff], every: 0.14, count: 3, up: 1.3, grav: -0.5 } },
+  scarletvale: { name: 'Scarlet Vale', desc: 'EXOTIC — every rose has thorns', primary: 0x5a0a18, secondary: 0xa02038, accent: 0xff5577, decor: 'scarletvale', blade: 'scythe', bladeGlow: 0xff5577, rarity: 'exotic', female: true, priceD: 120, aura: { colors: [0xff5577, 0xa02038], every: 0.13, count: 3, up: 1.1, grav: -0.8 } },
+  tempestrose: { name: 'Tempest Rose', desc: 'EXOTIC — petals of the storm', primary: 0x1a3a52, secondary: 0x4a7aaa, accent: 0xaaddff, decor: 'tempestrose', blade: 'spear', bladeGlow: 0xaaddff, rarity: 'exotic', female: true, priceD: 250, aura: { colors: [0xaaddff, 0x4a7aaa, 0xffffff], every: 0.12, count: 3, up: 1.4, grav: -0.9 } },
+  emberlily: { name: 'Ember Lily', desc: 'EXOTIC — blooms in fire', primary: 0x3a120a, secondary: 0xa03010, accent: 0xffaa33, decor: 'emberlily', blade: 'sword', bladeGlow: 0xff7722, rarity: 'exotic', female: true, priceD: 500, aura: { colors: [0xffaa33, 0xff5511, 0xffdd88], every: 0.1, count: 3, up: 1.6, grav: -2 } },
+  frostlily: { name: 'Frost Lily', desc: 'EXOTIC — a cold gentle touch', primary: 0x9fc8e8, secondary: 0x5a8ac0, accent: 0xe8f6ff, decor: 'frostlily', blade: 'spear', bladeGlow: 0xc8ecff, rarity: 'exotic', female: true, priceD: 900, aura: { colors: [0xe8f6ff, 0xc8ecff, 0x8fc8ee], every: 0.1, count: 3, up: 1.2, grav: -1.4 } },
+  violetenchantress: { name: 'Violet Enchantress', desc: 'EXOTIC — spells woven in violet', primary: 0x2a1040, secondary: 0x5a2a9a, accent: 0xcc88ff, decor: 'violetenchantress', blade: 'beam', bladeGlow: 0xcc88ff, rarity: 'exotic', female: true, priceD: 1500, aura: { colors: [0xcc88ff, 0x8a2be2, 0xffccff], every: 0.09, count: 3, up: 1, grav: -0.3 } },
+  goldenempress: { name: 'Golden Empress', desc: 'EXOTIC — ruler of the gilded age', primary: 0x8a6a1a, secondary: 0xd8b04a, accent: 0xffe9a8, decor: 'goldenempress', blade: 'sword', bladeGlow: 0xffd76a, rarity: 'exotic', female: true, priceD: 2500, aura: { colors: [0xffd76a, 0xffe9a8, 0xd8a02a], every: 0.09, count: 3, up: 1.5, grav: -0.7 } },
+  crimsonhuntress: { name: 'Crimson Huntress', desc: 'EXOTIC — the hunt never ends', primary: 0x3a0a14, secondary: 0x7a1a2a, accent: 0xff4466, decor: 'crimsonhuntress', blade: 'scythe', bladeGlow: 0xff4466, rarity: 'exotic', female: true, priceD: 4000, aura: { colors: [0xff4466, 0x7a1a2a], every: 0.09, count: 3, up: 1.2, grav: -0.9 } },
+  stormvalkyrie: { name: 'Storm Valkyrie', desc: 'EXOTIC — chooses the slain', primary: 0x2a3a5e, secondary: 0x8a9aba, accent: 0xffe14d, decor: 'stormvalkyrie', blade: 'spear', bladeGlow: 0xffe14d, rarity: 'exotic', female: true, priceD: 7000, aura: { colors: [0xffe14d, 0x9fdcff, 0xffffff], every: 0.08, count: 4, up: 1.7, grav: -1 } },
+  starweaver: { name: 'Starweaver', desc: 'EXOTIC — sews constellations', primary: 0x0a0a2a, secondary: 0x2a2a6e, accent: 0x88aaff, decor: 'starweaver', blade: 'beam', bladeGlow: 0x88aaff, rarity: 'exotic', female: true, priceD: 10000, aura: { colors: [0x88aaff, 0xffe9ff, 0xffffff, 0x66ccff], every: 0.07, count: 4, up: 1.4, grav: -0.4 } }
 };

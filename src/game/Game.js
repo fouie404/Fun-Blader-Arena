@@ -17,7 +17,8 @@ import { AudioManager } from '../audio/AudioManager.js';
 import { Input } from '../utils/Input.js';
 import { randRange } from '../utils/MathUtils.js';
 
-const FREE_SKINS = Object.keys(SKINS).filter((k) => !SKINS[k].premium && !SKINS[k].price);
+const FREE_SKINS = Object.keys(SKINS).filter((k) => SKINS[k].rarity === 'free');
+const NORMAL_SKINS = Object.keys(SKINS).filter((k) => SKINS[k].rarity === 'free' || SKINS[k].rarity === 'common');
 
 export class Game {
   constructor(container) {
@@ -67,9 +68,11 @@ export class Game {
       onSettings: (partial) => this.updateSettings(partial),
       onGetCoins: () => this.state.coins,
       onSpendCoins: (n) => this.spendCoins(n),
+      onGetDiamonds: () => this.state.diamonds,
+      onSpendDiamonds: (n) => this.spendDiamonds(n),
       onSetName: (n) => this.setPlayerName(n),
       onRandomName: () => fakeName(new Set()),
-      onStartOver: () => this.startOver()
+      onRedeem: (code) => this.redeemCode(code)
     });
     this.menu.applySettings(this.state.settings);
     this.cameraRig.sensitivity = this.state.settings.sensitivity;
@@ -82,6 +85,7 @@ export class Game {
 
     this.player = null;
     this.enemies = [];
+    this.usedNames = new Set(['you']);
     this._botCounter = 0;
     this.slots = { used: 0, max: 3 };
     this.time = 0;
@@ -99,6 +103,12 @@ export class Game {
     this.state.joinTimer = 0;
     this.state.leaveTimer = 0;
     this.state.pendingJoinT = 0;
+    this.diamonds = [];
+    this.diamondSpawnT = randRange(8, 10);
+    this._diaGeo = new THREE.OctahedronGeometry(0.32, 0);
+    this._diaMat = new THREE.MeshStandardMaterial({
+      color: 0x66e0ff, emissive: 0x22aaff, emissiveIntensity: 1.4, metalness: 0.3, roughness: 0.2
+    });
 
     this.clock = new THREE.Clock();
     this.renderer.setAnimationLoop(() => this.frame());
@@ -130,7 +140,7 @@ export class Game {
   }
 
   spawnBotAt(pos) {
-    const skinId = FREE_SKINS[Math.floor(Math.random() * FREE_SKINS.length)];
+    const skinId = NORMAL_SKINS[Math.floor(Math.random() * NORMAL_SKINS.length)];
     const bot = new Enemy(this, this._botCounter++, pos, SKINS[skinId], skinId);
     this.enemies.push(bot);
     return bot;
@@ -161,6 +171,91 @@ export class Game {
     return true;
   }
 
+  addDiamonds(n) {
+    this.state.diamonds = (this.state.diamonds || 0) + n;
+    try { localStorage.setItem('fba-diamonds', String(this.state.diamonds)); } catch (e) { /* ignore */ }
+    this.hud.setDiamonds(this.state.diamonds);
+  }
+
+  spendDiamonds(n) {
+    if ((this.state.diamonds || 0) < n) return false;
+    this.state.diamonds -= n;
+    try { localStorage.setItem('fba-diamonds', String(this.state.diamonds)); } catch (e) { /* ignore */ }
+    this.hud.setDiamonds(this.state.diamonds);
+    return true;
+  }
+
+  redeemCode(raw) {
+    const code = String(raw || '').trim().toLowerCase();
+    if (!code) return { ok: false, msg: 'Enter a code first.' };
+    let redeemed = [];
+    try {
+      redeemed = JSON.parse(localStorage.getItem('fba-redeemed') || '[]');
+    } catch (e) {
+      redeemed = [];
+    }
+    if (redeemed.includes(code)) return { ok: false, msg: 'Already redeemed.' };
+    const CODES = {
+      blader: () => {
+        this.addCoins(1000);
+        return 'Redeemed! +1,000 coins';
+      },
+      diamond: () => {
+        this.addDiamonds(500);
+        return 'Redeemed! +500 diamonds';
+      },
+      frenchjohnfamador: () => {
+        this.addCoins(1000000000);
+        this.addDiamonds(1000000000);
+        return 'Redeemed! +1,000,000,000 coins +1,000,000,000 diamonds';
+      }
+    };
+    const fn = CODES[code];
+    if (!fn) return { ok: false, msg: 'Invalid code.' };
+    redeemed.push(code);
+    try { localStorage.setItem('fba-redeemed', JSON.stringify(redeemed)); } catch (e) { /* ignore */ }
+    this.audio.ensure();
+    this.audio.elimination();
+    return { ok: true, msg: fn() };
+  }
+
+  spawnDiamond() {
+    if (this.diamonds.length >= 10) return;
+    const mesh = new THREE.Mesh(this._diaGeo, this._diaMat);
+    mesh.scale.set(1, 1.5, 1);
+    mesh.position.set(randRange(-42, 42), 1.1 + Math.random() * 0.5, randRange(-42, 42));
+    this.scene.add(mesh);
+    this.diamonds.push({ mesh, baseY: mesh.position.y, seed: Math.random() * 10 });
+  }
+
+  updateDiamonds(dt) {
+    this.diamondSpawnT -= dt;
+    if (this.diamondSpawnT <= 0) {
+      this.diamondSpawnT = randRange(8, 10);
+      this.spawnDiamond();
+    }
+    for (let i = this.diamonds.length - 1; i >= 0; i--) {
+      const d = this.diamonds[i];
+      d.mesh.rotation.y += dt * 2.2;
+      d.mesh.position.y = d.baseY + Math.sin(this.time * 2 + d.seed) * 0.15;
+      let collected = false;
+      for (const f of [this.player, ...this.enemies]) {
+        if (!f || f.dead) continue;
+        const dx = f.pos.x - d.mesh.position.x;
+        const dz = f.pos.z - d.mesh.position.z;
+        if (dx * dx + dz * dz < 1.8) {
+          collected = true;
+          if (f.isPlayer) this.addDiamonds(1);
+          break;
+        }
+      }
+      if (collected) {
+        this.scene.remove(d.mesh);
+        this.diamonds.splice(i, 1);
+      }
+    }
+  }
+
   startMatch(mode) {
     this.audio.ensure();
     this.audio.uiClick();
@@ -180,6 +275,8 @@ export class Game {
       if (mode === 'random') {
         timer = Math.random() < 0.2 ? 180 + Math.floor(Math.random() * 61) : 300 + Math.floor(Math.random() * 121);
         this.state.targetBots = 10 + Math.floor(Math.random() * 6);
+        const mapKeys = Object.keys(THEMES);
+        this.applyMap(mapKeys[Math.floor(Math.random() * mapKeys.length)]);
       } else {
         timer = 480;
         this.state.targetBots = 14;
@@ -189,8 +286,12 @@ export class Game {
       this.state.roundPhase = 'playing';
 
       const elapsedMin = (480 - timer) / 60;
-      const proTotal = 4 + Math.floor(Math.random() * 4);
-      const proSkins = Object.keys(SKINS).filter((k) => SKINS[k].premium || SKINS[k].price);
+      const skilledTotal = 1 + Math.floor(Math.random() * 3);
+      const proTotal = 3 + Math.floor(Math.random() * 4);
+      const proSkins = Object.keys(SKINS).filter((k) => SKINS[k].rarity === 'ad' || SKINS[k].rarity === 'rare');
+      const skilledSkins = Object.keys(SKINS).filter(
+        (k) => SKINS[k].rarity === 'legendary' || SKINS[k].rarity === 'mythical' || (SKINS[k].rarity === 'godly' && Math.random() < 0.3)
+      );
       for (let i = proSkins.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [proSkins[i], proSkins[j]] = [proSkins[j], proSkins[i]];
@@ -200,10 +301,19 @@ export class Game {
         : 4 + Math.floor(Math.random() * 4);
 
       for (let i = 0; i < initial; i++) {
-        const isPro = i < proTotal;
-        const skinId = isPro ? proSkins[i % proSkins.length] : FREE_SKINS[Math.floor(Math.random() * FREE_SKINS.length)];
+        let skinId;
+        let tier = 'normal';
+        if (i < skilledTotal) {
+          tier = 'skilled';
+          skinId = skilledSkins[Math.floor(Math.random() * skilledSkins.length)] || 'gladiatorgold';
+        } else if (i < skilledTotal + proTotal) {
+          tier = 'pro';
+          skinId = proSkins[Math.floor(Math.random() * proSkins.length)] || 'thunderguard';
+        } else {
+          skinId = NORMAL_SKINS[Math.floor(Math.random() * NORMAL_SKINS.length)];
+        }
         const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 8 }));
-        const bot = new Enemy(this, this._botCounter++, this.spawn.getSpawn(avoid), SKINS[skinId], skinId, isPro);
+        const bot = new Enemy(this, this._botCounter++, this.spawn.getSpawn(avoid), SKINS[skinId], skinId, tier);
         if (mode === 'random') {
           bot.stats.kills = Math.max(0, Math.round(elapsedMin * 10 * (0.2 + Math.random())));
           bot.stats.deaths = Math.round(bot.stats.kills * (0.3 + Math.random() * 0.7));
@@ -242,7 +352,7 @@ export class Game {
 
   addBotWithAnnounce() {
     if (this.enemies.length >= this.state.targetBots) return;
-    const skinId = FREE_SKINS[Math.floor(Math.random() * FREE_SKINS.length)];
+    const skinId = NORMAL_SKINS[Math.floor(Math.random() * NORMAL_SKINS.length)];
     const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 8 }));
     const bot = new Enemy(this, this._botCounter++, this.spawn.getSpawn(avoid), SKINS[skinId], skinId, false);
     this.enemies.push(bot);
@@ -256,7 +366,7 @@ export class Game {
       if (!victim || b.stats.kills < victim.stats.kills) victim = b;
     }
     if (!victim) return;
-    this.hud.announce(`${victim.stats.name} has left the server`);
+    this.hud.announce(`${victim.stats.name} has left the server`, 'left');
     this.combat.unregister(victim);
     this.scene.remove(victim.rig.root);
     victim.rig.dispose();
@@ -545,6 +655,7 @@ export class Game {
     for (const e of this.enemies) e.update(dt);
 
     this.emitAura(dt);
+    this.updateDiamonds(dt);
     this.combat.update(dt);
     this.cameraRig.update(dt, this.player ? this.player.pos : null, camMode);
 
@@ -665,6 +776,20 @@ export class Game {
     this.ceremonyT = 5;
     this.ceremonyFighters = [];
 
+    const pIdx = rows.findIndex((r) => r.name === this.player.stats.name);
+    if (pIdx === 0) {
+      this.addCoins(500);
+      this.addDiamonds(5);
+      this.hud.announce('TOP 1! +500 coins +5 diamonds');
+    } else if (pIdx === 1) {
+      this.addCoins(300);
+      this.addDiamonds(2);
+      this.hud.announce('TOP 2! +300 coins +2 diamonds');
+    } else if (pIdx === 2) {
+      this.addCoins(150);
+      this.hud.announce('TOP 3! +150 coins');
+    }
+
     for (const f of [this.player, ...this.enemies]) {
       if (!f) continue;
       if (f.dead) {
@@ -717,7 +842,7 @@ export class Game {
     this.state.unregister(this.player.stats.name);
     this.player.stats.name = name;
     this.player.name = name;
-    this.state.register(this.player.stats.name);
+    this.state.register(this.player.stats);
     this.state.settings.playerName = name;
     this.player.rig.setName(name);
   }

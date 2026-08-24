@@ -287,7 +287,10 @@ export class Fighter {
       if (attacker.isPlayer) {
         this.game.hud.showElimination();
         this.game.audio.elimination();
-        this.game.addCoins(50);
+        this.game.addCoins(20);
+      }
+      if (attacker.startTaunt && Math.random() < 0.2) {
+        attacker.startTaunt();
       }
     }
 

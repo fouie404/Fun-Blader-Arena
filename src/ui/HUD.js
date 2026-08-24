@@ -19,6 +19,7 @@ export class HUD {
         <div><span class="k">KILLS:</span> <span id="kills-val">0</span></div>
         <div><span class="d">DEATHS:</span> <span id="deaths-val">0</span></div>
         <div class="coins-line">COINS: <span id="coins-val">0</span></div>
+        <div class="diamonds-line">DIAMONDS: <span id="dia-val">0</span></div>
       </div>
 
       <div class="controls-hint">
@@ -71,6 +72,7 @@ export class HUD {
     this.killsVal = q('#kills-val');
     this.deathsVal = q('#deaths-val');
     this.coinsVal = q('#coins-val');
+    this.diaVal = q('#dia-val');
     this.roundTimer = q('#round-timer');
     this.top3List = q('#top3-list');
     this.announceFeed = q('#announce-feed');
@@ -105,6 +107,10 @@ export class HUD {
 
   setCoins(n) {
     this.coinsVal.textContent = Number(n || 0).toLocaleString();
+  }
+
+  setDiamonds(n) {
+    this.diaVal.textContent = Number(n || 0).toLocaleString();
   }
 
   setRoundTimer(sec) {
@@ -145,9 +151,9 @@ export class HUD {
     this.top3List.innerHTML = html;
   }
 
-  announce(text) {
+  announce(text, type) {
     const row = document.createElement('div');
-    row.className = 'announce-row';
+    row.className = 'announce-row' + (type === 'left' ? ' bad' : '');
     row.textContent = text;
     this.announceFeed.appendChild(row);
     while (this.announceFeed.children.length > 4) {
@@ -184,7 +190,7 @@ export class HUD {
 
   showElimination() {
     const sub = this.elimination.querySelector('.elim-sub');
-    if (sub) sub.textContent = '+1 Kill  \u2022  +50 Coins';
+    if (sub) sub.textContent = '+1 Kill  \u2022  +20 Coins';
     this.elimination.animate(
       [
         { opacity: 0, transform: 'translate(-50%,-14px) scale(0.8)' },

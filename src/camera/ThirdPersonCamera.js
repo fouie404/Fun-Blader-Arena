@@ -43,9 +43,9 @@ export class ThirdPersonCamera {
       const fx = targetPos ? targetPos.x : 0;
       const fz = targetPos ? targetPos.z : 0;
       const a = 0.7;
-      const r = 4.6;
+      const r = 4.4;
       this.cam.position.set(fx + Math.sin(a) * r, 2.0, fz + Math.cos(a) * r);
-      this.cam.lookAt(fx, 1.25, fz);
+      this.cam.lookAt(fx - 1.15, 1.25, fz);
       return;
     }
 

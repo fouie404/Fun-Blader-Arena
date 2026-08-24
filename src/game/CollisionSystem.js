@@ -26,6 +26,14 @@ export class CollisionSystem {
     return g;
   }
 
+  blockedAt(x, z, r, feetY = 0) {
+    for (const b of this.boxes) {
+      if (b.topY <= feetY + 0.56) continue;
+      if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) return true;
+    }
+    return false;
+  }
+
   resolveEntity(f) {
     const p = f.pos;
     const r = f.radius;

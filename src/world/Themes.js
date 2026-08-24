@@ -92,5 +92,62 @@ export const THEMES = {
       roof: 0x8a6038, pillar: 0xe0c098, cap: 0xc09868, platform: 0xe4c4a0,
       rock: 0xc8a878, trunk: 0x7a5a34, leafA: 0x5a7a3a, leafB: 0x6a8a42
     }
+  },
+  temple: {
+    id: 'temple',
+    name: 'Sky Temple',
+    desc: 'Marble steps of the sky monks',
+    layout: 'temple',
+    sky: 0xbfd8e8, fogColor: 0xc8d8e0, fogNear: 70, fogFar: 220,
+    hemiSky: 0xd8e8f4, hemiGround: 0x8a8a72, hemiI: 0.9,
+    sunColor: 0xfff4d8, sunI: 1.45, sunPos: [30, 75, 40],
+    ambColor: 0x3a4050, ambI: 0.3,
+    grass: 0x8aa06a, mountain: 0x7a8a9a, cloud: 0.6,
+    stars: false, moon: false,
+    torchColor: 0xffc060, torchI: 26,
+    particles: { color: 0xffe9c0, size: 0.13, vy: 0.3, drift: 0.6 },
+    t: {
+      floor: 0xf0ead8, wall: 0xe0d8c0, merlon: 0xcabfa4, tower: 0xe4dcc4,
+      roof: 0x9a8a5a, pillar: 0xf2ecda, cap: 0xcabfa4, platform: 0xece4cc,
+      rock: 0xcabfa0, trunk: 0x7a6a4a, leafA: 0x7a9a5a, leafB: 0x8aaa66
+    }
+  },
+  catacombs: {
+    id: 'catacombs',
+    name: 'Cursed Catacombs',
+    desc: 'Buried crypts that never sleep',
+    layout: 'catacombs',
+    sky: 0x0a0a12, fogColor: 0x14101e, fogNear: 40, fogFar: 160,
+    hemiSky: 0x4a3a6a, hemiGround: 0x0a0810, hemiI: 0.45,
+    sunColor: 0x8a7aff, sunI: 0.55, sunPos: [-30, 60, -35],
+    ambColor: 0x2a1a3a, ambI: 0.6,
+    grass: 0x1a1622, mountain: 0x141020, cloud: 0.15,
+    stars: false, moon: false,
+    torchColor: 0xaa66ff, torchI: 30,
+    particles: { color: 0xaa88ff, size: 0.13, vy: 0.35, drift: 0.5 },
+    t: {
+      floor: 0x4a4456, wall: 0x3a3448, merlon: 0x2e2a3c, tower: 0x403a52,
+      roof: 0x241f30, pillar: 0x524a66, cap: 0x2e2a3c, platform: 0x4e4860,
+      rock: 0x3c3648, trunk: 0x2a2434, leafA: 0x3a2e4e, leafB: 0x463a5c
+    }
+  },
+  cove: {
+    id: 'cove',
+    name: 'Wrecked Cove',
+    desc: 'A pirate graveyard on the sands',
+    layout: 'cove',
+    sky: 0x9ad0e0, fogColor: 0xaad8e0, fogNear: 60, fogFar: 200,
+    hemiSky: 0xc8e8f0, hemiGround: 0x5a6a4a, hemiI: 0.85,
+    sunColor: 0xfff0c0, sunI: 1.4, sunPos: [-45, 55, 25],
+    ambColor: 0x3a4a50, ambI: 0.3,
+    grass: 0x8a9a5a, mountain: 0x5a7a8a, cloud: 0.7,
+    stars: false, moon: false,
+    torchColor: 0xffa040, torchI: 26,
+    particles: null,
+    t: {
+      floor: 0xd8c090, wall: 0x8a7a5a, merlon: 0x6e6248, tower: 0x9a8a64,
+      roof: 0x5a4a34, pillar: 0xc8b088, cap: 0x6e6248, platform: 0xc8ac7c,
+      rock: 0xa89a78, trunk: 0x6a4a2a, leafA: 0x4a7a3a, leafB: 0x5a8a44
+    }
   }
 };

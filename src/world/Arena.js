@@ -77,6 +77,9 @@ export class Arena {
     else if (L === 'ember') this.buildEmber();
     else if (L === 'frost') this.buildFrost();
     else if (L === 'oasis') this.buildOasis();
+    else if (L === 'temple') this.buildTemple();
+    else if (L === 'catacombs') this.buildCatacombs();
+    else if (L === 'cove') this.buildCove();
     else {
       this.buildPillars();
       this.buildPlatforms();
@@ -575,6 +578,193 @@ export class Arena {
       m.receiveShadow = true;
       this.group.add(m);
       this.collision.addBox(x - 3.4, x + 3.4, z - 3.4, z + 3.4, 0, 0.95);
+    }
+  }
+
+  buildTemple() {
+    const mat = new THREE.MeshStandardMaterial({ color: this.t.platform, roughness: 0.9 });
+    const tiers = [
+      { s: 11, h: 0.4 },
+      { s: 7.5, h: 0.8 },
+      { s: 4.5, h: 1.2 }
+    ];
+    for (const t of tiers) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(t.s, t.h, t.s), mat);
+      m.position.set(0, t.h / 2, 0);
+      m.receiveShadow = true;
+      m.castShadow = true;
+      this.group.add(m);
+      this.collision.addBox(-t.s / 2, t.s / 2, -t.s / 2, t.s / 2, 0, t.h);
+    }
+    const altar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.9, 1.0), mat);
+    altar.position.y = 1.2 + 0.45;
+    altar.castShadow = true;
+    this.group.add(altar);
+    this.collision.addBox(-0.8, 0.8, -0.5, 0.5, 1.2, 2.1);
+
+    const gateMat = new THREE.MeshStandardMaterial({ color: this.t.pillar, roughness: 0.9 });
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
+      const gx = Math.sin(a) * 20;
+      const gz = Math.cos(a) * 20;
+      const p1 = new THREE.Mesh(new THREE.BoxGeometry(0.8, 5.2, 0.8), gateMat);
+      p1.position.set(gx - Math.cos(a) * 1.6, 2.6, gz + Math.sin(a) * 1.6);
+      const p2 = p1.clone();
+      p2.position.set(gx + Math.cos(a) * 1.6, 2.6, gz - Math.sin(a) * 1.6);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 4.6), gateMat);
+      beam.position.set(gx, 5.4, gz);
+      beam.rotation.y = a;
+      p1.castShadow = p2.castShadow = beam.castShadow = true;
+      this.group.add(p1, p2, beam);
+      this.collision.addOccluder(p1);
+      this.collision.addBox(p1.position.x - 0.5, p1.position.x + 0.5, p1.position.z - 0.5, p1.position.z + 0.5, 0, 5.2);
+      this.collision.addBox(p2.position.x - 0.5, p2.position.x + 0.5, p2.position.z - 0.5, p2.position.z + 0.5, 0, 5.2);
+    }
+
+    const statueMat = new THREE.MeshStandardMaterial({ color: this.t.rock, roughness: 1 });
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const r = 32;
+      const x = Math.sin(a) * r;
+      const z = Math.cos(a) * r;
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.6, 0.9), statueMat);
+      body.position.y = 1.3;
+      const head = new THREE.Mesh(GEO.head, statueMat);
+      head.position.y = 2.85;
+      head.scale.setScalar(1.3);
+      body.castShadow = head.castShadow = true;
+      g.add(body, head);
+      g.position.set(x, 0, z);
+      g.rotation.y = a + Math.PI;
+      this.group.add(g);
+      this.collision.addOccluder(body);
+      this.collision.addBox(x - 0.8, x + 0.8, z - 0.6, z + 0.6, 0, 3.4);
+    }
+  }
+
+  buildCatacombs() {
+    const tombMat = new THREE.MeshStandardMaterial({ color: this.t.platform, roughness: 1 });
+    const lidMat = new THREE.MeshStandardMaterial({ color: this.t.rock, roughness: 1 });
+    const tombSpots = [
+      [14, 6], [-14, -6], [6, -16], [-6, 16], [22, 14], [-22, -14], [16, 22], [-16, -22]
+    ];
+    for (const [x, z] of tombSpots) {
+      const base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.0, 1.2), tombMat);
+      base.position.set(x, 0.5, z);
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.25, 1.4), lidMat);
+      lid.position.set(x, 1.1, z);
+      base.castShadow = lid.castShadow = true;
+      this.group.add(base, lid);
+      this.collision.addBox(x - 1.2, x + 1.2, z - 0.7, z + 0.7, 0, 1.25);
+    }
+
+    const boneMat = new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 1 });
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = randRange(8, 38);
+      const x = Math.sin(a) * r;
+      const z = Math.cos(a) * r;
+      for (let j = 0; j < 3; j++) {
+        const b = new THREE.Mesh(new THREE.SphereGeometry(randRange(0.12, 0.2), 6, 5), boneMat);
+        b.position.set(x + randRange(-0.5, 0.5), 0.12, z + randRange(-0.5, 0.5));
+        this.group.add(b);
+      }
+    }
+
+    const pillarMat = new THREE.MeshStandardMaterial({ color: this.t.pillar, roughness: 0.95 });
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.5;
+      const r = 30;
+      const x = Math.sin(a) * r;
+      const z = Math.cos(a) * r;
+      const p = new THREE.Mesh(new THREE.BoxGeometry(1.1, 5.5, 1.1), pillarMat);
+      p.position.set(x, 2.75, z);
+      p.castShadow = true;
+      this.group.add(p);
+      this.collision.addOccluder(p);
+      this.collision.addBox(x - 0.65, x + 0.65, z - 0.65, z + 0.65, 0, 5.5);
+    }
+
+    const crackMat = new THREE.MeshBasicMaterial({
+      color: 0xaa66ff, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = randRange(10, 40);
+      const strip = new THREE.Mesh(new THREE.PlaneGeometry(randRange(3, 7), 0.8), crackMat);
+      strip.rotation.x = -Math.PI / 2;
+      strip.rotation.z = Math.random() * Math.PI;
+      strip.position.set(Math.sin(a) * r, 0.02, Math.cos(a) * r);
+      this.group.add(strip);
+    }
+  }
+
+  buildCove() {
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x5a3a22, roughness: 1 });
+    const hull = new THREE.Mesh(new THREE.BoxGeometry(9, 2.2, 3.4), hullMat);
+    hull.position.set(-18, 1.0, -14);
+    hull.rotation.y = 0.5;
+    hull.rotation.z = 0.12;
+    hull.castShadow = true;
+    this.group.add(hull);
+    this.collision.addOccluder(hull);
+    this.collision.addBox(-23, -13, -17, -11, 0, 2.2);
+
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.3, 9, 7), hullMat);
+    mast.position.set(-20, 5.2, -13);
+    mast.rotation.z = 0.35;
+    mast.castShadow = true;
+    this.group.add(mast);
+    this.collision.addBox(-21.4, -18.6, -13.9, -12.1, 0, 9);
+
+    const sail = new THREE.Mesh(
+      new THREE.BoxGeometry(3.4, 2.6, 0.06),
+      new THREE.MeshStandardMaterial({ color: 0xd8d0b8, roughness: 1, side: THREE.DoubleSide })
+    );
+    sail.position.set(-18.4, 6.4, -13);
+    sail.rotation.y = 0.5;
+    sail.rotation.z = 0.12;
+    this.group.add(sail);
+
+    const barrelMat = new THREE.MeshStandardMaterial({ color: 0x7a5a34, roughness: 1 });
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = randRange(10, 38);
+      const x = Math.sin(a) * r;
+      const z = Math.cos(a) * r;
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.9, 9), barrelMat);
+      b.position.set(x, 0.45, z);
+      b.rotation.y = Math.random() * Math.PI;
+      b.castShadow = true;
+      this.group.add(b);
+      this.collision.addBox(x - 0.5, x + 0.5, z - 0.5, z + 0.5, 0, 0.9);
+    }
+
+    const crateMat = new THREE.MeshStandardMaterial({ color: 0x9a7a4a, roughness: 1 });
+    for (let i = 0; i < 5; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = randRange(12, 36);
+      const x = Math.sin(a) * r;
+      const z = Math.cos(a) * r;
+      const s = randRange(0.9, 1.4);
+      const cRate = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), crateMat);
+      cRate.position.set(x, s / 2, z);
+      cRate.rotation.y = Math.random() * Math.PI;
+      cRate.castShadow = true;
+      this.group.add(cRate);
+      this.collision.addBox(x - s / 2, x + s / 2, z - s / 2, z + s / 2, 0, s);
+    }
+
+    const trunkMat = new THREE.MeshStandardMaterial({ color: this.t.trunk, roughness: 1 });
+    const leafMat = new THREE.MeshStandardMaterial({ color: this.t.leafA, roughness: 1, flatShading: true });
+    for (const [x, z] of [[28, 20], [-28, 20], [26, -24], [-26, 26]]) {
+      this.addTreeAt(x, z, randRange(0.9, 1.1), trunkMat, leafMat, leafMat, true);
+    }
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = randRange(58, 74);
+      this.addTreeAt(Math.sin(a) * r, Math.cos(a) * r, randRange(0.9, 1.5), trunkMat, leafMat, leafMat, false);
     }
   }
 
