@@ -59,13 +59,12 @@ export class CombatSystem {
 
       attack.hit.add(v);
       const point = new THREE.Vector3(v.pos.x - nx * 0.3, v.pos.y + 1.3, v.pos.z - nz * 0.3);
-      this.applyHit(attacker, v, def, point);
+      this.applyHit(attacker, v, def.dmg * (attacker.dmgMul || 1), point);
     }
   }
 
-  applyHit(attacker, victim, def, point) {
-    void def;
-    const res = victim.takeDamage(def.dmg, attacker, point);
+  applyHit(attacker, victim, dmg, point) {
+    const res = victim.takeDamage(dmg, attacker, point);
     if (!res) return;
 
     if (res.blocked) {

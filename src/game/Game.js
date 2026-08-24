@@ -76,9 +76,14 @@ export class Game {
     this._errShown = false;
     this._auraT = 0;
 
+    this.clock = new THREE.Clock();
+    this.renderer.setAnimationLoop(() => this.frame());
+
     this.player = new Player(this, new THREE.Vector3(0, 0, 0));
+    this.usedNames = new Set(['you']);
     const botCount = Math.max(1, Math.min(15, this.state.settings.bots || 10));
     for (let i = 0; i < botCount; i++) this.createEnemy(i);
+    this.createEliteBots();
 
     this.hud.setCoins(this.state.coins);
 
@@ -94,9 +99,6 @@ export class Game {
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
     });
-
-    this.clock = new THREE.Clock();
-    this.renderer.setAnimationLoop(() => this.frame());
   }
 
   createEnemy(i) {
@@ -112,6 +114,17 @@ export class Game {
     const bot = new Enemy(this, this._botCounter++, pos, SKINS[skinId], skinId);
     this.enemies.push(bot);
     return bot;
+  }
+
+  createEliteBots() {
+    const pool = Object.keys(SKINS).filter((k) => SKINS[k].premium || SKINS[k].price);
+    for (let i = 0; i < 3 && pool.length > 0; i++) {
+      const idx = Math.floor(Math.random() * pool.length);
+      const skinId = pool.splice(idx, 1)[0];
+      const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 9 }));
+      const pos = this.spawn.getSpawn(avoid);
+      this.enemies.push(new Enemy(this, this._botCounter++, pos, SKINS[skinId], skinId, true));
+    }
   }
 
   addCoins(n) {
@@ -136,6 +149,11 @@ export class Game {
       const avoid = this.enemies.filter((e) => !e.dead).map((e) => ({ pos: e.pos, radius: 10 }));
       this.player = new Player(this, this.spawn.getSpawn(avoid));
     } else {
+      const un = this.menu.getUnlocked();
+      const sk = SKINS[this.state.settings.skin];
+      if (sk && (sk.premium || sk.price) && !un.includes(this.state.settings.skin)) {
+        this.state.settings.skin = 'knight';
+      }
       const avoid = this.enemies.filter((e) => !e.dead).map((e) => ({ pos: e.pos, radius: 10 }));
       this.player.applySkin(this.state.settings.skin);
       this.player.respawn(this.spawn.getSpawn(avoid));
@@ -202,18 +220,21 @@ export class Game {
   }
 
   emitAura(dt) {
-    if (!this.player || this.player.dead || this.state.phase !== 'playing') return;
-    const skin = SKINS[this.player.rig.skinId];
-    if (!skin || !skin.aura) return;
-    this._auraT -= dt;
-    if (this._auraT > 0) return;
-    this._auraT = skin.aura.every;
-    const p = this.player.pos;
-    const color = skin.aura.colors[Math.floor(Math.random() * skin.aura.colors.length)];
-    this.combat.particles.spawnBurst(
-      { x: p.x + randRange(-0.45, 0.45), y: p.y + randRange(0.2, 1.7), z: p.z + randRange(-0.45, 0.45) },
-      { count: skin.aura.count, color, speed: 0.8, upBias: skin.aura.up, life: 0.75, gravity: skin.aura.grav }
-    );
+    const all = [this.player, ...this.enemies];
+    for (const f of all) {
+      if (!f || f.dead) continue;
+      const skin = SKINS[f.rig.skinId];
+      if (!skin || !skin.aura) continue;
+      f._auraT = (f._auraT || 0) - dt;
+      if (f._auraT > 0) continue;
+      f._auraT = skin.aura.every;
+      const p = f.pos;
+      const color = skin.aura.colors[Math.floor(Math.random() * skin.aura.colors.length)];
+      this.combat.particles.spawnBurst(
+        { x: p.x + randRange(-0.45, 0.45), y: p.y + randRange(0.2, 1.7), z: p.z + randRange(-0.45, 0.45) },
+        { count: skin.aura.count, color, speed: 0.8, upBias: skin.aura.up, life: 0.75, gravity: skin.aura.grav }
+      );
+    }
   }
 
   updateSettings(partial) {
@@ -315,12 +336,46 @@ export class Game {
 
     try {
       if (!this.paused) this.tick(dt);
+      this.sanitize();
+      this.renderer.render(this.scene, this.camera);
     } catch (err) {
       this.showFatalError(err);
+      try { this.renderer.render(this.scene, this.camera); } catch (e) { /* ignore */ }
     }
 
-    this.renderer.render(this.scene, this.camera);
     this.input.postUpdate();
+  }
+
+  sanitize() {
+    const bad = (v) => !Number.isFinite(v);
+
+    if (this.player) {
+      const p = this.player;
+      if (bad(p.pos.x) || bad(p.pos.y) || bad(p.pos.z) || bad(p.vel.x) || bad(p.vel.y) || bad(p.vel.z) || bad(p.yaw)) {
+        p.pos.set(0, 0, 0);
+        p.vel.set(0, 0, 0);
+        p.yaw = 0;
+        p.hp = Math.max(p.hp || 0, 1);
+        this.cameraRig.snap(p.pos);
+      }
+    }
+
+    for (const e of this.enemies) {
+      if (bad(e.pos.x) || bad(e.pos.y) || bad(e.pos.z) || bad(e.vel.x) || bad(e.vel.y) || bad(e.vel.z)) {
+        const avoid = this.enemies
+          .filter((o) => o !== e && !o.dead)
+          .map((o) => ({ pos: o.pos, radius: 10 }));
+        e.respawn(this.spawn.getSpawn(avoid));
+      }
+    }
+
+    const c = this.camera.position;
+    if (bad(c.x) || bad(c.y) || bad(c.z) || bad(this.cameraRig.yaw) || bad(this.cameraRig.pitch)) {
+      this.cameraRig.yaw = 0;
+      this.cameraRig.pitch = 0.34;
+      this.cameraRig.curDist = 5.6;
+      if (this.player) this.cameraRig.snap(this.player.pos);
+    }
   }
 
   tick(dt) {

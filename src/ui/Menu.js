@@ -150,11 +150,10 @@ export class Menu {
       const btn = e.target.closest('.skin-card');
       if (!btn || !btn.dataset.skin) return;
       if (btn.classList.contains('locked')) {
-        const s = SKINS[btn.dataset.skin];
-        if (s && s.price) this.showBuyModal(btn.dataset.skin);
-        else this.showAdModal(btn.dataset.skin);
+        this.previewLockedSkin(btn.dataset.skin);
         return;
       }
+      this.hidePreviewBar();
       this.selectSkin(btn.dataset.skin);
       this.onSettings({ skin: btn.dataset.skin });
     });
@@ -263,6 +262,7 @@ export class Menu {
           this.unlockSkin(skinId);
           ov.remove();
           this.adModal = null;
+          this.hidePreviewBar();
           this.selectSkin(skinId);
           this.onSettings({ skin: skinId });
         }, 700);
@@ -275,13 +275,56 @@ export class Menu {
     });
   }
 
-  selectSkin(id) {
+  selectSkin(id, force = false) {
     for (const card of this.skinGrid.querySelectorAll('.skin-card')) {
-      if (card.classList.contains('locked')) {
+      const isLocked = card.classList.contains('locked');
+      if (isLocked && !force) {
         card.classList.remove('sel');
         continue;
       }
       card.classList.toggle('sel', card.dataset.skin === id);
+    }
+  }
+
+  previewLockedSkin(id) {
+    const s = SKINS[id];
+    if (!s) return;
+    this.selectSkin(id, true);
+    this.onSettings({ skin: id });
+    this.showPreviewBar(id);
+  }
+
+  showPreviewBar(id) {
+    const s = SKINS[id];
+    if (!s) return;
+    this.hidePreviewBar();
+    const bar = document.createElement('div');
+    bar.id = 'preview-bar';
+    const actionLabel = s.premium ? 'WATCH AD TO UNLOCK' : `BUY - ${Number(s.price).toLocaleString()} COINS`;
+    bar.innerHTML = `
+      <span class="pb-name">${s.name}</span>
+      <span class="pb-sub">${s.premium ? 'Ad-locked skin - try it on!' : 'Previewing - buy to keep it'}</span>
+      <button class="menu-btn small" id="pb-action">${actionLabel}</button>
+      <button class="menu-btn small" id="pb-close">X</button>
+    `;
+    this.root.appendChild(bar);
+    this.previewBar = bar;
+    bar.querySelector('#pb-action').addEventListener('click', () => {
+      if (s.premium) this.showAdModal(id);
+      else this.showBuyModal(id);
+    });
+    bar.querySelector('#pb-close').addEventListener('click', () => {
+      this.hidePreviewBar();
+      const owned = this.lastAppliedSkin || 'knight';
+      this.selectSkin(owned);
+      this.onSettings({ skin: owned });
+    });
+  }
+
+  hidePreviewBar() {
+    if (this.previewBar) {
+      this.previewBar.remove();
+      this.previewBar = null;
     }
   }
 
@@ -295,6 +338,7 @@ export class Menu {
     this.currentPanel = which;
     this.root.classList.toggle('skins-mode', which === 'skins');
     this.root.classList.toggle('maps-mode', which === 'maps');
+    if (which !== 'skins') this.hidePreviewBar();
     const $ = (id) => this.root.querySelector(`#${id}`);
     $('panel-home').style.display = which === 'home' ? 'grid' : 'none';
     $('panel-skins').style.display = which === 'skins' ? 'block' : 'none';
@@ -320,7 +364,7 @@ export class Menu {
         <div class="ad-title">${s.name.toUpperCase()}</div>
         <div class="ad-sub">${s.desc}</div>
         <div class="buy-price">${Number(s.price).toLocaleString()} COINS</div>
-        <div class="ad-status" id="buy-status">Your balance: ${Number(this.onGetCoins() || 0).toLocaleString()}</div>
+        <div class="ad-status" id="buy-status"></div>
         <div class="srv-actions">
           <button class="menu-btn small" id="buy-confirm">BUY</button>
           <button class="menu-btn small" id="buy-cancel">CANCEL</button>
@@ -328,6 +372,15 @@ export class Menu {
       </div>`;
     document.body.appendChild(ov);
     this.buyModal = ov;
+
+    const st = ov.querySelector('#buy-status');
+    const updateStatus = (msg, bad) => {
+      const bal = Number(this.onGetCoins() || 0);
+      const need = Math.max(0, s.price - bal);
+      st.style.color = bad ? '#ff8a7a' : '#e8e2d5';
+      st.textContent = msg || `Balance: ${bal.toLocaleString()} / ${s.price.toLocaleString()}` + (need > 0 ? ` — need ${need.toLocaleString()} more (50 per kill)` : ' — you can afford this!');
+    };
+    updateStatus();
 
     ov.querySelector('#buy-cancel').addEventListener('click', () => {
       ov.remove();
@@ -339,18 +392,18 @@ export class Menu {
         ov.remove();
         this.buyModal = null;
         this.refreshCoins();
+        this.hidePreviewBar();
         this.selectSkin(skinId);
         this.onSettings({ skin: skinId });
       } else {
-        const st = ov.querySelector('#buy-status');
-        st.textContent = 'Not enough coins! Kill knights to earn more.';
-        st.style.color = '#ff8a7a';
+        updateStatus('Not enough coins! Kill knights — 50 coins each.', true);
       }
     });
   }
 
   applySettings(s) {
     const $ = (id) => this.root.querySelector(`#${id}`);
+    this.lastAppliedSkin = s.skin || 'knight';
     $('set-sens').value = s.sensitivity;
     $('val-sens').textContent = Number(s.sensitivity).toFixed(1);
     $('set-vol').value = s.volume;

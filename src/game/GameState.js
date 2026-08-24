@@ -3,9 +3,11 @@ export class GameState {
     this.phase = 'menu';
     this.paused = false;
     try {
-      this.coins = parseInt(localStorage.getItem('fba-coins') || '0', 10) || 0;
+      const raw = localStorage.getItem('fba-coins');
+      this.coins = raw === null ? 500 : parseInt(raw, 10) || 0;
+      if (this.coins < 0) this.coins = 0;
     } catch (e) {
-      this.coins = 0;
+      this.coins = 500;
     }
     this.settings = {
       sensitivity: 1.0,

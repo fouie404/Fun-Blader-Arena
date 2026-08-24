@@ -114,6 +114,8 @@ export class HUD {
   }
 
   showElimination() {
+    const sub = this.elimination.querySelector('.elim-sub');
+    if (sub) sub.textContent = '+1 Kill  \u2022  +50 Coins';
     this.elimination.animate(
       [
         { opacity: 0, transform: 'translate(-50%,-14px) scale(0.8)' },

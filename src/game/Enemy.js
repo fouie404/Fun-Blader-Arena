@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Fighter } from './Fighter.js';
-import { dampAngle, randRange } from '../utils/MathUtils.js';
+import { dampAngle, randRange, randPick } from '../utils/MathUtils.js';
 
 const PERSONALITIES = {
   aggressive: {
@@ -19,20 +19,49 @@ const PERSONALITIES = {
 
 const TYPES = ['aggressive', 'balanced', 'defensive'];
 
+const NAME_A = ['dark', 'shadow', 'wolf', 'iron', 'storm', 'blaze', 'ghost', 'night', 'razor', 'silent', 'toxic', 'frost', 'wild', 'cyber', 'lucky', 'angry', 'epic', 'sneaky', 'mad', 'pro', 'salty', 'hyper'];
+const NAME_B = ['john', 'slayer', 'blade', 'x', 'king', 'lord', 'hunter', 'reaper', 'ninja', 'gamer', 'max', 'sam', 'alex', 'rex', 'kai', 'fox', 'bear', 'mann', 'dilina', 'wow'];
+
+function fakeName(used) {
+  for (let i = 0; i < 25; i++) {
+    let n;
+    const r = Math.random();
+    if (r < 0.35) n = randPick(NAME_A) + randPick(NAME_B);
+    else if (r < 0.6) n = randPick(NAME_A) + randPick(NAME_B) + Math.floor(Math.random() * 100);
+    else if (r < 0.8) n = randPick(NAME_B) + '_' + randPick(NAME_A);
+    else n = randPick(NAME_B) + Math.floor(Math.random() * 1000);
+    if (!used.has(n.toLowerCase())) {
+      used.add(n.toLowerCase());
+      return n;
+    }
+  }
+  const fallback = 'player_' + Math.floor(Math.random() * 100000);
+  used.add(fallback.toLowerCase());
+  return fallback;
+}
+
 const _intent = new THREE.Vector3();
 
 export class Enemy extends Fighter {
-  constructor(game, index, spawnPos, colors, skinId = 'knight') {
+  constructor(game, index, spawnPos, colors, skinId = 'knight', elite = false) {
     super(game, {
-      name: `Knight_${String(index + 1).padStart(2, '0')}`,
+      name: fakeName(game.usedNames || (game.usedNames = new Set())),
       isEnemy: true,
       colors,
       pos: spawnPos,
       skin: skinId
     });
+    this.elite = !!elite;
     const type = TYPES[index % TYPES.length];
     this.pKey = type;
-    this.p = PERSONALITIES[type];
+    if (this.elite) {
+      this.p = {
+        detect: 42, engage: 3.0, keep: 2.0, strafeAmt: 0.55,
+        blockChance: 0.78, cd: [0.8, 1.4], speedMul: 1.1
+      };
+    } else {
+      this.p = PERSONALITIES[type];
+    }
     this.speedMul = this.p.speedMul;
 
     this.state = 'wander';
@@ -45,6 +74,8 @@ export class Enemy extends Fighter {
     this.blockT = 0;
     this.blockCd = 0;
     this.dashTimer = randRange(2, 5);
+    this.dodgeJumpT = 0;
+    this._stuckT = 0;
     this.slotHeld = false;
 
     this.target = null;
@@ -103,7 +134,9 @@ export class Enemy extends Fighter {
     if (this.dead) return;
     if (this.blockCd <= 0 && Math.random() < this.p.blockChance) {
       this.blockT = randRange(0.5, 0.95);
-      this.blockCd = 1.8;
+      this.blockCd = this.elite ? 1.2 : 1.8;
+    } else if (this.elite && Math.random() < 0.35) {
+      this.dodgeJumpT = 0.25;
     } else if (Math.random() < 0.35 && attacker) {
       const ax = this.pos.x - attacker.pos.x;
       const az = this.pos.z - attacker.pos.z;
@@ -195,7 +228,10 @@ export class Enemy extends Fighter {
           _intent.multiplyScalar(0.4);
         }
         if (distP < this.p.engage + 0.5) {
-          if (g.requestSlot(this)) {
+          if (this.elite) {
+            this.state = 'combat';
+            this.attackTimer = Math.min(this.attackTimer, 0.3);
+          } else if (g.requestSlot(this)) {
             this.slotHeld = true;
             this.state = 'combat';
             this.attackTimer = randRange(0.15, 0.5);
@@ -231,7 +267,10 @@ export class Enemy extends Fighter {
           this.dashTimer = randRange(3.0, 5.0);
         }
         if (distP < this.p.engage + 0.3 && this.attackTimer <= 0 && !this.attack) {
-          if (this.startAttack()) {
+          const fx = Math.sin(this.yaw);
+          const fz = Math.cos(this.yaw);
+          const aim = (dx / distP) * fx + (dz / distP) * fz;
+          if (aim > 0.5 && this.startAttack()) {
             this.attackTimer = randRange(this.p.cd[0], this.p.cd[1]) * 1.8;
           }
         }
@@ -267,12 +306,16 @@ export class Enemy extends Fighter {
         sprint = distP > this.p.keep + 3;
 
         if (this.dashTimer <= 0 && distP > this.p.engage + 1.5) {
-          if (Math.random() < 0.5) this.tryDash(dx / distP, dz / distP);
+          if (Math.random() < (this.elite ? 0.7 : 0.5)) this.tryDash(dx / distP, dz / distP);
           this.dashTimer = randRange(2.8, 4.5);
         }
 
         if (!this.attack && this.attackTimer <= 0 && distP < this.p.engage + 0.5) {
-          if (this.startAttack()) {
+          const fx = Math.sin(this.yaw);
+          const fz = Math.cos(this.yaw);
+          const aim = (dx / distP) * fx + (dz / distP) * fz;
+          const aimGate = this.elite ? 0.93 : 0.5;
+          if (aim > aimGate && this.startAttack()) {
             this.attackTimer = randRange(this.p.cd[0], this.p.cd[1]);
           }
         }
@@ -304,9 +347,38 @@ export class Enemy extends Fighter {
 
     this.blockT -= dt;
     this.blockCd -= dt;
+    const wasBlocking = this.blockT > 0;
     this.setBlocking(this.blockT > 0);
+    if (
+      this.elite && wasBlocking && this.blockT <= 0 &&
+      hasTarget && distP < this.p.engage + 0.5 && !this.attack
+    ) {
+      this.attackTimer = Math.min(this.attackTimer, 0.1);
+    }
 
-    this.applyMovement(dt, { moveDir: _intent, sprint, jump: false });
+    let jump = false;
+    if (this.dodgeJumpT > 0) {
+      this.dodgeJumpT -= dt;
+      if (this.grounded) jump = true;
+    }
+    if (hasTarget && this.grounded && distP < 5 && t.pos.y > this.pos.y + 0.6) {
+      jump = true;
+    }
+    if (this.state === 'combat' && this.grounded && Math.random() < dt * 0.2) {
+      jump = true;
+    }
+    const hsNow = Math.hypot(this.vel.x, this.vel.z);
+    if (this.grounded && ilen > 0.4 && hsNow < 0.6) {
+      this._stuckT = (this._stuckT || 0) + dt;
+      if (this._stuckT > 0.45) {
+        jump = true;
+        this._stuckT = 0;
+      }
+    } else {
+      this._stuckT = 0;
+    }
+
+    this.applyMovement(dt, { moveDir: _intent, sprint, jump });
 
     if (faceYaw !== null) {
       this.yaw = dampAngle(this.yaw, faceYaw, 10, dt);

@@ -669,6 +669,44 @@ kbd {
   font-size: 14px;
 }
 
+#preview-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 190px;
+  transform: translateX(-50%);
+  z-index: 36;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(12, 10, 16, 0.88);
+  border: 1px solid rgba(201, 162, 39, 0.55);
+  border-radius: 12px;
+  padding: 10px 18px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+#preview-bar .pb-name {
+  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: #ffd76a;
+}
+
+#preview-bar .pb-sub {
+  font-size: 12px;
+  color: #b9ad93;
+  letter-spacing: 1px;
+}
+
+#preview-bar .menu-btn {
+  width: auto;
+  padding: 9px 16px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
 .buy-price {
   font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
   font-size: 30px;

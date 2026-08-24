@@ -328,7 +328,7 @@ export class CharacterRig {
         crystal.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
         this.orbitGroup.add(crystal);
       }
-      this.decor.add(this.orbitGroup);
+      g.add(this.orbitGroup);
     }
 
     if (g.children.length) {
