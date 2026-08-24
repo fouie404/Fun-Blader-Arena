@@ -24,7 +24,7 @@ export class Player extends Fighter {
   }
 
   idle(dt) {
-    this.yaw = 0.7 + Math.PI;
+    this.yaw = 0.7;
     this.rig.setYaw(this.yaw);
     this.rig.update(dt, {
       speedRatio: 0,

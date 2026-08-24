@@ -72,6 +72,9 @@ export class Enemy extends Fighter {
     this.diamondTarget = null;
     this._diaT = Math.random() * 0.5;
     this.tauntT = 0;
+    this.processT = 0;
+    this._processBase = 0;
+    this._processedDeath = false;
 
     this.state = 'wander';
     this.wanderTarget = new THREE.Vector3().copy(this.pos);
@@ -92,6 +95,8 @@ export class Enemy extends Fighter {
     this.hopperT = 0;
     this.hopDirT = 0;
     this._hopCd = 0;
+    this._hopStateCd = randRange(14, 22);
+    this._afkCd = randRange(12, 20);
     this._afkBase = 0;
     this._t = Math.random() * 10;
     this.slotHeld = false;
@@ -126,6 +131,12 @@ export class Enemy extends Fighter {
 
   takeDamage(amount, attacker, hitPoint) {
     const res = super.takeDamage(amount, attacker, hitPoint);
+    if (this.tauntT > 0) {
+      this.tauntT = 0;
+      this.setBlocking(false);
+      this.state = 'chase';
+      this.reactT = 0.1;
+    }
     if (res && attacker && attacker !== this && !attacker.dead) {
       if (this.state === 'afk') {
         this.state = 'chase';
@@ -197,7 +208,7 @@ export class Enemy extends Fighter {
   }
 
   startTaunt() {
-    this.tauntT = 2.5;
+    this.tauntT = randRange(3, 5);
     this.attack = null;
     this.blockT = 0;
     this.releaseSlot();
@@ -233,14 +244,34 @@ export class Enemy extends Fighter {
       if (this.retaliateT <= 0) this.retaliateTarget = null;
     }
     this.retargetT -= dt;
-    if (this.target && !this.target.dead) {
-      const tdx = this.target.pos.x - this.pos.x;
-      const tdz = this.target.pos.z - this.pos.z;
-      if (Math.hypot(tdx, tdz) > 30) {
-        this.target = null;
-        this.retaliateTarget = null;
-        this.retaliateT = 0;
+    if (this.target && this.target.dead && !this._processedDeath) {
+      this._processedDeath = true;
+      let near = null;
+      let nd = 25;
+      for (const f of g.combat.fighters) {
+        if (f === this || f.dead) continue;
+        const ddx = f.pos.x - this.pos.x;
+        const ddz = f.pos.z - this.pos.z;
+        const d2 = ddx * ddx + ddz * ddz;
+        if (d2 < nd) {
+          nd = d2;
+          near = f;
+        }
       }
+      if (near) {
+        this.target = near;
+        this.retaliateTarget = near;
+        this.retaliateT = 6;
+        this.state = nd < 9 ? 'combat' : 'chase';
+        this.attackTimer = Math.min(this.attackTimer, 0.4);
+      } else {
+        this.target = null;
+        this.state = 'wander';
+        this.pickWanderTarget();
+      }
+    }
+    if (this.target && !this.target.dead) {
+      this._processedDeath = false;
     }
     const targetInvalid = !this.target || this.target.dead;
 
@@ -300,21 +331,23 @@ export class Enemy extends Fighter {
         if (wd < 2 || this.thinkT <= 0) {
           this.pickWanderTarget();
           const roll = Math.random();
-          if (roll < 0.18) {
+          if (roll < 0.1 && this._afkCd <= 0) {
             this.state = 'afk';
-            this.afkT = randRange(3, 8);
+            this.afkT = randRange(3, 6);
             this._afkBase = this.yaw;
-            this._afkSpin = Math.random() < 0.3;
-            this._afkSpinSpeed = randRange(1.5, 3) * (Math.random() < 0.5 ? -1 : 1);
-            this._afkSwaySpeed = randRange(0.5, 1.4);
-            this._afkSwayAmp = randRange(0.6, 1.1);
+            this._afkSpin = Math.random() < 0.15;
+            this._afkSpinSpeed = randRange(1, 2.2) * (Math.random() < 0.5 ? -1 : 1);
+            this._afkSwaySpeed = randRange(0.4, 1);
+            this._afkSwayAmp = randRange(0.5, 0.9);
+            this._afkCd = randRange(12, 20);
             break;
           }
-          if (roll < 0.33) {
+          if (roll < 0.2 && this._hopStateCd <= 0) {
             this.state = 'hopper';
-            this.hopperT = randRange(3, 7);
+            this.hopperT = randRange(3, 6);
             this.hopDirT = 0;
             this._hopCd = 0;
+            this._hopStateCd = randRange(14, 22);
             break;
           }
         } else {
@@ -535,6 +568,10 @@ export class Enemy extends Fighter {
     if (ilen > 1) _intent.divideScalar(ilen);
 
     this._diaT -= dt;
+    this._afkCd -= dt;
+    this._hopStateCd -= dt;
+    if (this._afkCd < -99) this._afkCd = 0;
+    if (this._hopStateCd < -99) this._hopStateCd = 0;
     if (this._diaT <= 0) {
       this._diaT = 0.5;
       this.diamondTarget = null;
