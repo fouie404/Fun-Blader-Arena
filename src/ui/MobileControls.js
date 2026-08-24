@@ -89,6 +89,36 @@ export class MobileControls {
     bind('#mc-menu', () => {
       if (game.state.phase === 'playing') game.showLeaveConfirm();
     });
+
+    const canvas = game.renderer.domElement;
+    let lookId = null;
+    let lx = 0;
+    let ly = 0;
+    canvas.addEventListener('touchstart', (e) => {
+      if (lookId !== null) return;
+      const t = e.changedTouches[0];
+      lookId = t.identifier;
+      lx = t.clientX;
+      ly = t.clientY;
+    }, { passive: false });
+    canvas.addEventListener('touchmove', (e) => {
+      if (lookId === null) return;
+      for (const t of e.changedTouches) {
+        if (t.identifier === lookId) {
+          e.preventDefault();
+          input.addLook((t.clientX - lx) * 2.4, (t.clientY - ly) * 2.4);
+          lx = t.clientX;
+          ly = t.clientY;
+        }
+      }
+    }, { passive: false });
+    const endLook = (e) => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === lookId) lookId = null;
+      }
+    };
+    canvas.addEventListener('touchend', endLook);
+    canvas.addEventListener('touchcancel', endLook);
   }
 
   setVisible(v) {

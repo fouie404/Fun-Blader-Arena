@@ -9,6 +9,8 @@ export class Input {
     this.locked = false;
     this.onLockChange = null;
     this.mobile = { active: false, x: 0, y: 0, block: false };
+    this.lookDX = 0;
+    this.lookDY = 0;
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Tab') e.preventDefault();
@@ -73,10 +75,20 @@ export class Input {
     this.pressed.add(name);
   }
 
+  addLook(dx, dy) {
+    this.lookDX += dx;
+    this.lookDY += dy;
+  }
+
   consumeDelta() {
-    const d = { dx: this.mouseDX, dy: this.mouseDY };
+    const d = {
+      dx: this.mouseDX + this.lookDX,
+      dy: this.mouseDY + this.lookDY
+    };
     this.mouseDX = 0;
     this.mouseDY = 0;
+    this.lookDX = 0;
+    this.lookDY = 0;
     return d;
   }
 

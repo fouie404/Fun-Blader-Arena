@@ -55,13 +55,9 @@ export class ThirdPersonCamera {
       return;
     }
 
-    if (this.input.locked) {
-      const d = this.input.consumeDelta();
-      this.yaw -= d.dx * 0.0023 * this.sensitivity;
-      this.pitch = Math.max(-0.55, Math.min(1.35, this.pitch + d.dy * 0.0023 * this.sensitivity));
-    } else {
-      this.input.consumeDelta();
-    }
+    const delta = this.input.consumeDelta();
+    this.yaw -= delta.dx * 0.0023 * this.sensitivity;
+    this.pitch = Math.max(-0.55, Math.min(1.35, this.pitch + delta.dy * 0.0023 * this.sensitivity));
 
     if (!this.hasPivot && targetPos) this.snap(targetPos);
     if (targetPos) {
