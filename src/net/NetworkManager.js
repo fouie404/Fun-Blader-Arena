@@ -14,6 +14,7 @@ export class NetworkManager {
       this.socket = new WebSocket(`${proto}://${location.host}/game-ws`);
       this.socket.onopen = () => {
         this.connected = true;
+        this.send({ t: 'cfg', bots: this.game.state.settings.bots });
         console.log('%c[LAN] Connected to arena server', 'color:#7fd4ff');
       };
       this.socket.onmessage = (e) => {
@@ -47,6 +48,7 @@ export class NetworkManager {
     switch (m.t) {
       case 'welcome': {
         this.myId = m.id;
+        if (m.cfg && m.cfg.bots) this.game.applyHostBots(m.cfg.bots);
         if (Array.isArray(m.others)) {
           for (const id of m.others) this.game.addRemotePlayer(id);
         }

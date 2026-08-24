@@ -226,9 +226,14 @@ export class Enemy extends Fighter {
           0,
           (dx / distP) * this.strafeDir * 0.85 + (dz / distP) * radial
         );
-        if (this.dashTimer <= 0 && distP < this.p.engage + 3) {
-          this.tryDash(_intent.x, _intent.z);
-          this.dashTimer = randRange(2.4, 4.5);
+        if (this.dashTimer <= 0 && distP > desired + 1.5) {
+          if (Math.random() < 0.5) this.tryDash(dx / distP, dz / distP);
+          this.dashTimer = randRange(3.0, 5.0);
+        }
+        if (distP < this.p.engage + 0.3 && this.attackTimer <= 0 && !this.attack) {
+          if (this.startAttack()) {
+            this.attackTimer = randRange(this.p.cd[0], this.p.cd[1]) * 1.8;
+          }
         }
         if (hasTarget && distP < this.p.engage + 1.6 && g.requestSlot(this)) {
           this.slotHeld = true;
@@ -261,14 +266,12 @@ export class Enemy extends Fighter {
         );
         sprint = distP > this.p.keep + 3;
 
-        if (this.dashTimer <= 0 && distP < this.p.engage + 2.5) {
-          const r = Math.random();
-          if (r < 0.45) this.tryDash(_intent.x, _intent.z);
-          else if (r < 0.7 && distP < this.p.keep + 0.5) this.tryDash(-dx / distP, -dz / distP);
-          this.dashTimer = randRange(2.2, 4.2);
+        if (this.dashTimer <= 0 && distP > this.p.engage + 1.5) {
+          if (Math.random() < 0.5) this.tryDash(dx / distP, dz / distP);
+          this.dashTimer = randRange(2.8, 4.5);
         }
 
-        if (!this.attack && this.attackTimer <= 0 && distP < this.p.engage + 1.2) {
+        if (!this.attack && this.attackTimer <= 0 && distP < this.p.engage + 0.5) {
           if (this.startAttack()) {
             this.attackTimer = randRange(this.p.cd[0], this.p.cd[1]);
           }

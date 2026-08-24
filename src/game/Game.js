@@ -5,17 +5,19 @@ import { SpawnSystem } from './SpawnSystem.js';
 import { CombatSystem } from './CombatSystem.js';
 import { Player } from './Player.js';
 import { Enemy } from './Enemy.js';
-import { RemotePlayer } from './RemotePlayer.js';
 import { SKINS } from './Skins.js';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera.js';
 import { Environment } from '../world/Environment.js';
 import { Arena } from '../world/Arena.js';
+import { THEMES } from '../world/Themes.js';
 import { HUD } from '../ui/HUD.js';
 import { Menu } from '../ui/Menu.js';
 import { Scoreboard } from '../ui/Scoreboard.js';
 import { AudioManager } from '../audio/AudioManager.js';
-import { NetworkManager } from '../net/NetworkManager.js';
 import { Input } from '../utils/Input.js';
+import { randRange } from '../utils/MathUtils.js';
+
+const FREE_SKINS = Object.keys(SKINS).filter((k) => !SKINS[k].premium && !SKINS[k].price);
 
 export class Game {
   constructor(container) {
@@ -34,14 +36,13 @@ export class Game {
 
     this.state = new GameState();
     this.audio = new AudioManager();
-    this.network = new NetworkManager(this);
 
     this.input = new Input(this.renderer.domElement);
 
     this.collision = new CollisionSystem(46.4);
     this.spawn = new SpawnSystem();
-    this.env = new Environment(this.scene);
-    this.arena = new Arena(this.scene, this.collision);
+    this.env = new Environment(this.scene, THEMES[this.state.settings.map] || THEMES.citadel);
+    this.arena = new Arena(this.scene, this.collision, THEMES[this.state.settings.map] || THEMES.citadel);
     this.combat = new CombatSystem(this);
     this.cameraRig = new ThirdPersonCamera(this.camera, this.input, this.collision);
 
@@ -51,7 +52,9 @@ export class Game {
       onPlay: () => this.start(),
       onResume: () => this.resumeFromPause(),
       onQuitToMenu: () => this.quitToMenu(),
-      onSettings: (partial) => this.updateSettings(partial)
+      onSettings: (partial) => this.updateSettings(partial),
+      onGetCoins: () => this.state.coins,
+      onSpendCoins: (n) => this.spendCoins(n)
     });
     this.menu.applySettings(this.state.settings);
     this.cameraRig.sensitivity = this.state.settings.sensitivity;
@@ -64,7 +67,6 @@ export class Game {
 
     this.player = null;
     this.enemies = [];
-    this.remotes = new Map();
     this._botCounter = 0;
     this.slots = { used: 0, max: 3 };
     this.time = 0;
@@ -72,11 +74,13 @@ export class Game {
     this._lastCd = -1;
     this._sbTimer = 0;
     this._errShown = false;
+    this._auraT = 0;
 
     this.player = new Player(this, new THREE.Vector3(0, 0, 0));
-    const botCount = Math.max(1, Math.min(10, this.state.settings.bots || 7));
+    const botCount = Math.max(1, Math.min(15, this.state.settings.bots || 10));
     for (let i = 0; i < botCount; i++) this.createEnemy(i);
-    this.network.connect();
+
+    this.hud.setCoins(this.state.coins);
 
     this.input.onLockChange = (locked) => {
       if (!locked && this.state.phase === 'playing' && this.player && !this.player.dead) {
@@ -96,8 +100,7 @@ export class Game {
   }
 
   createEnemy(i) {
-    const keys = Object.keys(SKINS);
-    const skinId = keys[(i + 1) % keys.length];
+    const skinId = FREE_SKINS[(i + 1) % FREE_SKINS.length];
     const colors = SKINS[skinId];
     const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 9 }));
     const pos = this.spawn.getSpawn(avoid);
@@ -105,64 +108,24 @@ export class Game {
   }
 
   spawnBotAt(pos) {
-    const keys = Object.keys(SKINS);
-    const skinId = keys[Math.floor(Math.random() * keys.length)];
+    const skinId = FREE_SKINS[Math.floor(Math.random() * FREE_SKINS.length)];
     const bot = new Enemy(this, this._botCounter++, pos, SKINS[skinId], skinId);
     this.enemies.push(bot);
     return bot;
   }
 
-  pickBotToReplace() {
-    for (const b of this.enemies) {
-      if (b.dead) return b;
-    }
-    let best = null;
-    let far = -1;
-    for (const b of this.enemies) {
-      const d = this.player ? b.pos.distanceToSquared(this.player.pos) : 0;
-      if (d > far) {
-        far = d;
-        best = b;
-      }
-    }
-    return best;
+  addCoins(n) {
+    this.state.coins = (this.state.coins || 0) + n;
+    try { localStorage.setItem('fba-coins', String(this.state.coins)); } catch (e) { /* ignore */ }
+    this.hud.setCoins(this.state.coins);
   }
 
-  addRemotePlayer(id) {
-    if (!id || id === this.network.myId || this.remotes.has(id)) return;
-    const bot = this.pickBotToReplace();
-    if (!bot) return;
-
-    const idx = this.enemies.indexOf(bot);
-    if (idx >= 0) this.enemies.splice(idx, 1);
-    this.combat.unregister(bot);
-    this.scene.remove(bot.rig.root);
-    bot.rig.dispose();
-
-    const stats = bot.stats;
-    this.state.unregister(stats.name);
-    stats.name = `Player ${id.slice(1, 4).toUpperCase()}`;
-    stats.kills = 0;
-    stats.deaths = 0;
-    this.state.register(stats);
-
-    const keys = Object.keys(SKINS);
-    const skinId = keys[Math.floor(Math.random() * keys.length)];
-    const rp = new RemotePlayer(this, id, stats, bot.pos.clone(), skinId);
-    this.remotes.set(id, rp);
-    console.log(`%c[LAN] ${stats.name} entered the arena`, 'color:#7fd4ff');
-  }
-
-  removeRemotePlayer(id) {
-    const r = this.remotes.get(id);
-    if (!r) return;
-    this.remotes.delete(id);
-    this.combat.unregister(r);
-    this.scene.remove(r.rig.root);
-    r.rig.dispose();
-    this.state.unregister(r.stats.name);
-    this.spawnBotAt(r.pos.clone());
-    console.log('%c[LAN] A player left - a knight fills the slot', 'color:#7fd4ff');
+  spendCoins(n) {
+    if ((this.state.coins || 0) < n) return false;
+    this.state.coins -= n;
+    try { localStorage.setItem('fba-coins', String(this.state.coins)); } catch (e) { /* ignore */ }
+    this.hud.setCoins(this.state.coins);
+    return true;
   }
 
   start() {
@@ -238,6 +201,21 @@ export class Game {
     }, 180);
   }
 
+  emitAura(dt) {
+    if (!this.player || this.player.dead || this.state.phase !== 'playing') return;
+    const skin = SKINS[this.player.rig.skinId];
+    if (!skin || !skin.aura) return;
+    this._auraT -= dt;
+    if (this._auraT > 0) return;
+    this._auraT = skin.aura.every;
+    const p = this.player.pos;
+    const color = skin.aura.colors[Math.floor(Math.random() * skin.aura.colors.length)];
+    this.combat.particles.spawnBurst(
+      { x: p.x + randRange(-0.45, 0.45), y: p.y + randRange(0.2, 1.7), z: p.z + randRange(-0.45, 0.45) },
+      { count: skin.aura.count, color, speed: 0.8, upBias: skin.aura.up, life: 0.75, gravity: skin.aura.grav }
+    );
+  }
+
   updateSettings(partial) {
     Object.assign(this.state.settings, partial);
     const s = this.state.settings;
@@ -247,9 +225,31 @@ export class Game {
     if (partial.skin !== undefined && this.player) {
       this.player.applySkin(s.skin);
     }
-    if (partial.bots !== undefined) {
-      this.setBotCount(Math.max(1, Math.min(10, Math.round(partial.bots))));
+    if (partial.map !== undefined) {
+      this.applyMap(s.map);
     }
+    if (partial.bots !== undefined) {
+      this.setBotCount(Math.max(1, Math.min(15, Math.round(partial.bots))));
+    }
+  }
+
+  applyMap(id) {
+    if (!THEMES[id]) return;
+    this.state.settings.map = id;
+    this.collision.boxes.length = 0;
+    this.collision.occluders.length = 0;
+    this.env.dispose();
+    this.arena.dispose();
+    const theme = THEMES[id];
+    this.env = new Environment(this.scene, theme);
+    this.arena = new Arena(this.scene, this.collision, theme);
+  }
+
+  applyHostBots(n) {
+    const c = Math.max(1, Math.min(15, Math.round(n)));
+    this.state.settings.bots = c;
+    this.setBotCount(c);
+    this.menu.applySettings(this.state.settings);
   }
 
   setBotCount(n) {
@@ -347,14 +347,13 @@ export class Game {
         }
       }
       camMode = this.state.phase === 'menu'
-        ? (this.menu.currentPanel === 'skins' ? 'preview' : 'menu')
+        ? (this.menu.currentPanel === 'skins' ? 'preview' : this.menu.currentPanel === 'maps' ? 'mapPreview' : 'menu')
         : this.player.dead ? 'dead' : 'play';
     }
 
     for (const e of this.enemies) e.update(dt);
-    for (const r of this.remotes.values()) r.update(dt);
-    this.network.update(dt);
 
+    this.emitAura(dt);
     this.combat.update(dt);
     this.cameraRig.update(dt, this.player ? this.player.pos : null, camMode);
 

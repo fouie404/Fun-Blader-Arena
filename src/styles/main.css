@@ -342,15 +342,16 @@ kbd {
 
 .menu-inner {
   text-align: center;
-  max-width: 560px;
-  padding: 24px;
+  max-width: 680px;
+  padding: 16px;
 }
 
 .game-title {
   font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
-  font-size: 78px;
+  font-size: clamp(28px, 4.4vw, 56px);
   font-weight: 800;
-  letter-spacing: 14px;
+  letter-spacing: 5px;
+  white-space: nowrap;
   background: linear-gradient(180deg, #ffe9a8 15%, #d8a02a 55%, #8a5f14 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -359,11 +360,11 @@ kbd {
 }
 
 .game-subtitle {
-  margin-top: 4px;
-  letter-spacing: 5px;
-  font-size: 14px;
+  margin-top: 2px;
+  letter-spacing: 4px;
+  font-size: 13px;
   color: #b9ad93;
-  margin-bottom: 38px;
+  margin-bottom: 26px;
 }
 
 .menu-panel {
@@ -371,6 +372,20 @@ kbd {
   flex-direction: column;
   gap: 14px;
   align-items: center;
+}
+
+#panel-home {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 215px));
+  gap: 12px 16px;
+  justify-content: center;
+}
+
+#panel-home .menu-btn {
+  width: 100%;
+  padding: 13px 0;
+  font-size: 15px;
+  letter-spacing: 3px;
 }
 
 .menu-btn {
@@ -599,10 +614,168 @@ kbd {
 }
 
 .skin-desc {
-  font-size: 11px;
+  font-size: 12px;
   color: #b9ad93;
-  line-height: 1.35;
+  line-height: 1.45;
   white-space: normal;
+}
+
+.skin-card.locked .skin-chip {
+  filter: grayscale(0.85) brightness(0.6);
+}
+
+.skin-card.locked .skin-name {
+  color: #8a8274;
+}
+
+.skin-card.locked .skin-desc {
+  color: #c9a227;
+  font-weight: 600;
+}
+
+.ad-tag {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #0d0a08;
+  background: #d8a02a;
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.ad-tag.buy {
+  background: #7fd4ff;
+  color: #0a1420;
+}
+
+.coins-chip {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #ffd76a;
+  background: rgba(201, 162, 39, 0.12);
+  border: 1px solid rgba(201, 162, 39, 0.5);
+  border-radius: 20px;
+  padding: 5px 18px;
+  margin-bottom: 10px;
+}
+
+.coins-line {
+  color: #ffd76a;
+  font-size: 14px;
+}
+
+.buy-price {
+  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  font-size: 30px;
+  font-weight: 800;
+  color: #7fd4ff;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+
+.skin-card {
+  position: relative;
+}
+
+/* ads */
+.ad-banner {
+  width: min(728px, 92vw);
+  min-height: 96px;
+  margin: 18px auto 8px;
+  background: rgba(10, 8, 14, 0.55);
+  border: 1px solid rgba(201, 162, 39, 0.25);
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ad-label {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: #6a6252;
+  margin-bottom: 3px;
+}
+
+#ad-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 3, 7, 0.85);
+}
+
+.ad-card {
+  width: 380px;
+  max-width: 94vw;
+  background: linear-gradient(#1d1812, #120e0a);
+  border: 1px solid rgba(201, 162, 39, 0.55);
+  border-radius: 12px;
+  padding: 22px 24px;
+  text-align: center;
+  box-shadow: 0 14px 60px rgba(0, 0, 0, 0.8);
+}
+
+.ad-title {
+  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  font-size: 22px;
+  letter-spacing: 4px;
+  color: #ffd76a;
+}
+
+.ad-sub {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #b9ad93;
+  margin-bottom: 14px;
+}
+
+.ad-box {
+  width: 300px;
+  max-width: 100%;
+  height: 250px;
+  margin: 0 auto 14px;
+  background: #0d0a12;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ad-progress {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.ad-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #d8a02a, #ffd76a);
+  transition: width 1s linear;
+}
+
+.ad-status {
+  font-size: 13.5px;
+  color: #e8e2d5;
+  margin-bottom: 14px;
+  letter-spacing: 1px;
 }
 
 #panel-skins {
@@ -619,21 +792,27 @@ kbd {
   transition: background 0.3s ease-out;
 }
 
-#menu.skins-mode {
+#menu.skins-mode,
+#menu.maps-mode {
   background: linear-gradient(rgba(5, 4, 8, 0.15), rgba(8, 6, 12, 0.32));
 }
 
 #menu.skins-mode .game-title,
 #menu.skins-mode .game-subtitle,
-#menu.skins-mode .menu-footer {
+#menu.skins-mode .menu-footer,
+#menu.maps-mode .game-title,
+#menu.maps-mode .game-subtitle,
+#menu.maps-mode .menu-footer {
   display: none;
 }
 
-#menu.skins-mode .menu-inner {
+#menu.skins-mode .menu-inner,
+#menu.maps-mode .menu-inner {
   transform: none;
 }
 
-#menu.skins-mode #panel-skins {
+#menu.skins-mode #panel-skins,
+#menu.maps-mode #panel-maps {
   position: fixed;
   left: 50%;
   bottom: 14px;
@@ -650,7 +829,8 @@ kbd {
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
 }
 
-#menu.skins-mode #btn-back-3 {
+#menu.skins-mode #btn-back-3,
+#menu.maps-mode #btn-back-4 {
   position: fixed;
   top: 24px;
   right: 30px;
@@ -690,8 +870,77 @@ kbd {
   font-size: 12.5px;
 }
 
-#panel-skins .skin-desc {
+#panel-skins .skin-desc,
+#panel-maps .skin-desc {
   font-size: 10.5px;
+}
+
+/* server browser */
+#panel-servers .srv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 440px;
+  max-width: 86vw;
+  min-height: 120px;
+  margin-bottom: 16px;
+}
+
+.srv-status {
+  text-align: center;
+  color: #b9ad93;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 26px 10px;
+  border: 1px dashed rgba(201, 162, 39, 0.3);
+  border-radius: 10px;
+}
+
+.srv-row {
+  pointer-events: auto;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  padding: 12px 16px;
+  background: linear-gradient(#1d1812, #14100c);
+  border: 1px solid rgba(201, 162, 39, 0.35);
+  border-radius: 10px;
+  cursor: pointer;
+  color: #e8e2d5;
+  transition: all 0.13s ease-out;
+}
+
+.srv-row:hover {
+  border-color: #d8a02a;
+  box-shadow: 0 0 14px rgba(216, 160, 42, 0.3);
+  transform: translateY(-2px);
+}
+
+.srv-name {
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #ffe9ad;
+  font-size: 15px;
+}
+
+.srv-addr {
+  font-size: 12px;
+  color: #b9ad93;
+  font-family: Consolas, monospace;
+}
+
+.srv-count {
+  font-size: 12.5px;
+  color: #8fd8ff;
+  font-weight: 600;
+}
+
+.srv-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
 }
 
 /* error overlay */

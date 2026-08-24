@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { clamp } from '../utils/MathUtils.js';
 import { SKINS } from './Skins.js';
 
+const randRange = (a, b) => a + Math.random() * (b - a);
+
 const GEO = {
   head: new THREE.BoxGeometry(0.5, 0.5, 0.48),
   torso: new THREE.BoxGeometry(0.72, 0.85, 0.42),
@@ -26,7 +28,11 @@ const GEO = {
   crown: new THREE.CylinderGeometry(0.3, 0.3, 0.13, 8),
   spike: new THREE.ConeGeometry(0.06, 0.16, 4),
   mask: new THREE.BoxGeometry(0.44, 0.26, 0.06),
-  eye: new THREE.BoxGeometry(0.08, 0.05, 0.02)
+  eye: new THREE.BoxGeometry(0.08, 0.05, 0.02),
+  coil: new THREE.CylinderGeometry(0.05, 0.08, 0.34, 6),
+  orb: new THREE.SphereGeometry(0.09, 8, 6),
+  halo: new THREE.TorusGeometry(0.26, 0.035, 8, 24),
+  crystal: new THREE.OctahedronGeometry(0.11, 0)
 };
 
 function makeNameTexture(name, color) {
@@ -148,6 +154,11 @@ export class CharacterRig {
     if (this.decor) {
       this.torsoPivot.remove(this.decor);
       this.decor = null;
+      this.orbitGroup = null;
+    }
+    if (this.decorExtra) {
+      this.torsoPivot.remove(this.decorExtra);
+      this.decorExtra = null;
     }
     const g = new THREE.Group();
     const add = (geo, mat, x, y, z) => {
@@ -185,6 +196,139 @@ export class CharacterRig {
       add(GEO.mask, this.matDark, 0, 1.84, 0.25);
       add(GEO.eye, this.matGlow, -0.1, 1.87, 0.285);
       add(GEO.eye, this.matGlow, 0.1, 1.87, 0.285);
+    } else if (key === 'dragon') {
+      const hornL = add(GEO.spike, this.matAccent, -0.15, 2.2, 0.02);
+      hornL.rotation.z = 0.5;
+      hornL.scale.set(1.3, 1.8, 1.3);
+      const hornR = add(GEO.spike, this.matAccent, 0.15, 2.2, 0.02);
+      hornR.rotation.z = -0.5;
+      hornR.scale.set(1.3, 1.8, 1.3);
+      const wingL = add(GEO.cloak, this.matPrimary, -0.42, 1.45, -0.3);
+      wingL.rotation.y = 0.55;
+      wingL.rotation.z = 0.5;
+      wingL.scale.set(0.62, 0.85, 1);
+      const wingR = add(GEO.cloak, this.matPrimary, 0.42, 1.45, -0.3);
+      wingR.rotation.y = -0.55;
+      wingR.rotation.z = -0.5;
+      wingR.scale.set(0.62, 0.85, 1);
+      const tail = add(GEO.crossV, this.matAccent, 0, 0.62, -0.26);
+      tail.scale.set(1.2, 1.4, 1);
+    } else if (key === 'reaper') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.42, -0.02);
+      hood.rotation.y = Math.PI / 6;
+      hood.scale.set(1.2, 1.2, 1.2);
+      add(GEO.mask, this.matDark, 0, 1.82, 0.26);
+      add(GEO.eye, this.matGlow, -0.09, 1.86, 0.3);
+      add(GEO.eye, this.matGlow, 0.09, 1.86, 0.3);
+      const spikeL = add(GEO.spike, this.matDark, -0.56, 1.66, 0);
+      spikeL.rotation.z = 2.6;
+      spikeL.scale.set(1.4, 2.0, 1.4);
+      const spikeR = add(GEO.spike, this.matDark, 0.56, 1.66, 0);
+      spikeR.rotation.z = -2.6;
+      spikeR.scale.set(1.4, 2.0, 1.4);
+    } else if (key === 'frostking') {
+      add(GEO.crown, this.matAccent, 0, 2.22, 0);
+      for (let i = 0; 4 > i; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        add(GEO.spike, this.matAccent, Math.sin(a) * 0.22, 2.36, Math.cos(a) * 0.22);
+      }
+      const cape = add(GEO.cloak, this.matSecondary, 0, 1.2, -0.28);
+      cape.scale.set(1.15, 1.1, 1);
+      const icL = add(GEO.spike, this.matAccent, -0.47, 1.38, 0.02);
+      icL.rotation.x = Math.PI;
+      icL.scale.set(0.8, 1.6, 0.8);
+      const icR = add(GEO.spike, this.matAccent, 0.47, 1.38, 0.02);
+      icR.rotation.x = Math.PI;
+      icR.scale.set(0.8, 1.6, 0.8);
+    } else if (key === 'warlord') {
+      const hornL = add(GEO.spike, this.matAccent, -0.17, 2.18, 0.02);
+      hornL.rotation.z = 0.65;
+      hornL.scale.set(1.5, 2.1, 1.5);
+      const hornR = add(GEO.spike, this.matAccent, 0.17, 2.18, 0.02);
+      hornR.rotation.z = -0.65;
+      hornR.scale.set(1.5, 2.1, 1.5);
+      add(GEO.mask, this.matDark, 0, 1.84, 0.26);
+      add(GEO.eye, this.matGlow, -0.09, 1.87, 0.3);
+      add(GEO.eye, this.matGlow, 0.09, 1.87, 0.3);
+      for (let i = -1; i <= 1; i++) {
+        const trophy = add(GEO.spike, this.matAccent, i * 0.22, 0.92, 0.26);
+        trophy.rotation.x = Math.PI;
+        trophy.scale.set(0.7, 1.1, 0.7);
+      }
+      const spikeL = add(GEO.spike, this.matSecondary, -0.5, 1.72, 0);
+      spikeL.rotation.z = 2.7;
+      spikeL.scale.set(1.3, 1.8, 1.3);
+      const spikeR = add(GEO.spike, this.matSecondary, 0.5, 1.72, 0);
+      spikeR.rotation.z = -2.7;
+      spikeR.scale.set(1.3, 1.8, 1.3);
+    } else if (key === 'storm') {
+      const coilL = add(GEO.coil, this.matSecondary, -0.47, 1.82, 0);
+      void coilL;
+      const coilR = add(GEO.coil, this.matSecondary, 0.47, 1.82, 0);
+      void coilR;
+      const orbL = add(GEO.orb, this.matGlow, -0.47, 2.06, 0);
+      void orbL;
+      const orbR = add(GEO.orb, this.matGlow, 0.47, 2.06, 0);
+      void orbR;
+      add(GEO.crossV, this.matGlow, 0, 1.22, 0.23);
+      add(GEO.crossH, this.matGlow, 0, 1.3, 0.23);
+      const fin = add(GEO.spike, this.matAccent, 0, 2.32, -0.05);
+      fin.scale.set(0.9, 1.5, 0.9);
+    } else if (key === 'inferno') {
+      for (let i = -1; i <= 1; i++) {
+        const flame = add(GEO.spike, this.matGlow, i * 0.12, 2.34 + Math.abs(i) * -0.06, 0);
+        flame.scale.set(0.9, 1.6 - Math.abs(i) * 0.3, 0.9);
+      }
+      const flameL = add(GEO.spike, this.matGlow, -0.47, 1.78, 0);
+      flameL.scale.set(1.1, 1.5, 1.1);
+      const flameR = add(GEO.spike, this.matGlow, 0.47, 1.78, 0);
+      flameR.scale.set(1.1, 1.5, 1.1);
+      const cape = add(GEO.cloak, this.matSecondary, 0, 1.18, -0.28);
+      cape.scale.set(1.05, 1.1, 1);
+    } else if (key === 'celestial') {
+      const halo = new THREE.Mesh(GEO.halo, this.matGlow);
+      halo.position.y = 2.52;
+      halo.rotation.x = Math.PI / 2;
+      this.torsoPivot.add(halo);
+      this.decorExtra = halo;
+      const wingL = add(GEO.cloak, this.matAccent, -0.46, 1.5, -0.3);
+      wingL.rotation.y = 0.6;
+      wingL.rotation.z = 0.35;
+      wingL.scale.set(0.6, 1.0, 1);
+      const wingR = add(GEO.cloak, this.matAccent, 0.46, 1.5, -0.3);
+      wingR.rotation.y = -0.6;
+      wingR.rotation.z = -0.35;
+      wingR.scale.set(0.6, 1.0, 1);
+      add(GEO.crossV, this.matAccent, 0, 1.24, 0.235);
+    } else if (key === 'cosmic') {
+      const hood = add(GEO.hood, this.matPrimary, 0, 2.42, -0.02);
+      hood.rotation.y = Math.PI / 6;
+      hood.scale.set(1.25, 1.25, 1.25);
+      add(GEO.mask, this.matDark, 0, 1.82, 0.26);
+      add(GEO.eye, this.matGlow, -0.09, 1.86, 0.3);
+      add(GEO.eye, this.matGlow, 0.09, 1.86, 0.3);
+      const cape = add(GEO.cloak, this.matSecondary, 0, 1.16, -0.29);
+      cape.scale.set(1.25, 1.25, 1);
+      for (let i = 0; i < 5; i++) {
+        const star = add(GEO.orb, this.matGlow, randRange(-0.3, 0.3), randRange(0.9, 1.6), -0.32);
+        star.scale.setScalar(randRange(0.4, 0.9));
+      }
+      const spikeL = add(GEO.spike, this.matSecondary, -0.54, 1.7, 0);
+      spikeL.rotation.z = 2.6;
+      spikeL.scale.set(1.4, 1.9, 1.4);
+      const spikeR = add(GEO.spike, this.matSecondary, 0.54, 1.7, 0);
+      spikeR.rotation.z = -2.6;
+      spikeR.scale.set(1.4, 1.9, 1.4);
+      this.orbitGroup = new THREE.Group();
+      this.orbitGroup.position.y = 1.5;
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2;
+        const crystal = new THREE.Mesh(GEO.crystal, this.matGlow);
+        crystal.position.set(Math.sin(a) * 0.95, Math.sin(i * 2.1) * 0.22, Math.cos(a) * 0.95);
+        crystal.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+        this.orbitGroup.add(crystal);
+      }
+      this.decor.add(this.orbitGroup);
     }
 
     if (g.children.length) {
@@ -434,5 +578,10 @@ export class CharacterRig {
     this.torsoPivot.rotation.y += (twistY - this.torsoPivot.rotation.y) * Math.min(1, dt * 20);
     this.torsoPivot.rotation.x += (leanX - this.torsoPivot.rotation.x) * Math.min(1, dt * 12);
     this.torsoPivot.position.y = bob;
+
+    if (this.orbitGroup) {
+      this.orbitGroup.rotation.y += dt * 2.3;
+      this.orbitGroup.position.y = 1.5 + Math.sin(this.time * 2.1) * 0.09;
+    }
   }
 }

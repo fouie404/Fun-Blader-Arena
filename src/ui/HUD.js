@@ -11,6 +11,7 @@ export class HUD {
       <div class="score-panel">
         <div><span class="k">KILLS:</span> <span id="kills-val">0</span></div>
         <div><span class="d">DEATHS:</span> <span id="deaths-val">0</span></div>
+        <div class="coins-line">COINS: <span id="coins-val">0</span></div>
       </div>
 
       <div class="controls-hint">
@@ -62,6 +63,7 @@ export class HUD {
     this.hpText = q('#hp-text');
     this.killsVal = q('#kills-val');
     this.deathsVal = q('#deaths-val');
+    this.coinsVal = q('#coins-val');
     this.crosshair = q('#crosshair');
     this.vignette = q('#dmg-vignette');
     this.elimination = q('#elimination');
@@ -87,6 +89,10 @@ export class HUD {
   setScore(kills, deaths) {
     this.killsVal.textContent = kills;
     this.deathsVal.textContent = deaths;
+  }
+
+  setCoins(n) {
+    this.coinsVal.textContent = Number(n || 0).toLocaleString();
   }
 
   hitMarker(blocked) {

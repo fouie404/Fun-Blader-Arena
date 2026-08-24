@@ -49,6 +49,12 @@ export class ThirdPersonCamera {
       return;
     }
 
+    if (mode === 'mapPreview') {
+      this.cam.position.set(36, 22, 36);
+      this.cam.lookAt(0, 1, 0);
+      return;
+    }
+
     if (this.input.locked) {
       const d = this.input.consumeDelta();
       this.yaw -= d.dx * 0.0023 * this.sensitivity;
