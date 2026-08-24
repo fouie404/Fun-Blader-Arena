@@ -66,8 +66,10 @@ export class Player extends Fighter {
     }
 
     const k = input.keys;
-    let mx = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
-    let mz = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0);
+    const mob = input.mobile;
+    const joyActive = mob.active && Math.hypot(mob.x, mob.y) > 0.12;
+    let mx = joyActive ? mob.x : (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0);
+    let mz = joyActive ? mob.y : (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0);
     const len = Math.hypot(mx, mz);
     if (len > 1) {
       mx /= len;
@@ -78,12 +80,17 @@ export class Player extends Fighter {
     const c = Math.cos(camYaw);
     _move.set(s * mz - c * mx, 0, c * mz + s * mx);
 
-    const sprint = !!(k.ShiftLeft || k.ShiftRight);
-    const wantBlock = input.buttons.right && !this.attack;
+    const sprint = !!((k.ShiftLeft || k.ShiftRight || joyActive) && len > 0);
+    const wantBlock = (input.buttons.right || mob.block) && !this.attack;
     this.setBlocking(wantBlock);
 
     if (input.pressed.has('attack')) this.requestAttack();
     this.handleDashTaps(input);
+    if (input.pressed.has('dash')) {
+      const dx = joyActive || len > 0 ? _move.x : Math.sin(this.yaw);
+      const dz = joyActive || len > 0 ? _move.z : Math.cos(this.yaw);
+      this.tryDash(dx, dz);
+    }
     const jump = input.pressed.has('jump');
 
     this.applyMovement(dt, { moveDir: _move, sprint, jump });

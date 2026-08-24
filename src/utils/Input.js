@@ -8,6 +8,7 @@ export class Input {
     this.mouseDY = 0;
     this.locked = false;
     this.onLockChange = null;
+    this.mobile = { active: false, x: 0, y: 0, block: false };
 
     window.addEventListener('keydown', (e) => {
       if (e.code === 'Tab') e.preventDefault();
@@ -67,6 +68,10 @@ export class Input {
   }
 
   isDown(code) { return !!this.keys[code]; }
+
+  pressAction(name) {
+    this.pressed.add(name);
+  }
 
   consumeDelta() {
     const d = { dx: this.mouseDX, dy: this.mouseDY };

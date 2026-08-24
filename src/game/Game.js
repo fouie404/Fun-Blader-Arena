@@ -13,6 +13,7 @@ import { THEMES } from '../world/Themes.js';
 import { HUD } from '../ui/HUD.js';
 import { Menu } from '../ui/Menu.js';
 import { Scoreboard } from '../ui/Scoreboard.js';
+import { MobileControls } from '../ui/MobileControls.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { Input } from '../utils/Input.js';
 import { randRange } from '../utils/MathUtils.js';
@@ -62,6 +63,10 @@ export class Game {
 
     this.hud = new HUD();
     this.scoreboard = new Scoreboard();
+    this.isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    if (this.isTouch) document.body.classList.add('touch');
+    this.mobile = new MobileControls(this);
+    this.mobile.setVisible(false);
     this.menu = new Menu({
       onPlay: () => this.startMatch('play'),
       onStartRandom: () => this.startMatch('random'),
@@ -657,6 +662,7 @@ export class Game {
     this.emitAura(dt);
     this.updateDiamonds(dt);
     this.combat.update(dt);
+    this.mobile.setVisible(this.isTouch && this.state.phase === 'playing' && this.state.roundPhase === 'playing');
     this.cameraRig.update(dt, this.player ? this.player.pos : null, camMode);
 
     if (this.state.roundRunning && this.state.phase === 'playing') {

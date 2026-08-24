@@ -566,6 +566,7 @@ export class Enemy extends Fighter {
 
     let ilen = _intent.length();
     if (ilen > 1) _intent.divideScalar(ilen);
+    sprint = true;
 
     this._diaT -= dt;
     this._afkCd -= dt;
