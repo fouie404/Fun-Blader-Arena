@@ -94,6 +94,7 @@ export class CharacterRig {
     head.position.y = 1.88;
     head.castShadow = true;
     this.torsoPivot.add(head);
+    this.head = head;
 
     const helm = new THREE.Mesh(GEO.helm, this.matSecondary);
     helm.position.y = 2.08;
@@ -409,6 +410,8 @@ export class CharacterRig {
     for (const m of this.mats) m.opacity = 1;
     this.flashT = 0;
     this.deadFaded = false;
+    this._celBase = null;
+    this.removeCrown();
     this.armL.pivot.rotation.set(0, 0, 0);
     this.armR.pivot.rotation.set(0, 0, 0);
     this.legL.rotation.set(0, 0, 0);
@@ -473,6 +476,36 @@ export class CharacterRig {
 
     this.root.rotation.x += (0 - this.root.rotation.x) * Math.min(1, dt * 14);
     for (const m of this.mats) if (m.opacity < 1) m.opacity = Math.min(1, m.opacity + dt * 4);
+
+    if (st.sit || st.celebrate) {
+      const k2 = Math.min(1, dt * 8);
+      if (this._celBase === null || this._celBase === undefined) this._celBase = this.root.position.y;
+      if (st.celebrate) {
+        this.root.position.y = this._celBase + Math.abs(Math.sin(this.time * 7)) * 0.38;
+        this.armL.pivot.rotation.x += (-2.9 - this.armL.pivot.rotation.x) * k2;
+        this.armR.pivot.rotation.x += (-2.9 - this.armR.pivot.rotation.x) * k2;
+        this.armL.pivot.rotation.z += (0.35 - this.armL.pivot.rotation.z) * k2;
+        this.armR.pivot.rotation.z += (-0.35 - this.armR.pivot.rotation.z) * k2;
+        this.legL.rotation.x += (0.15 - this.legL.rotation.x) * k2;
+        this.legR.rotation.x += (-0.15 - this.legR.rotation.x) * k2;
+        this.torsoPivot.rotation.x += (-0.06 - this.torsoPivot.rotation.x) * k2;
+        this.torsoPivot.position.y += (0 - this.torsoPivot.position.y) * k2;
+      } else {
+        this.root.position.y = this._celBase;
+        this.legL.rotation.x += (-1.5 - this.legL.rotation.x) * k2;
+        this.legR.rotation.x += (-1.5 - this.legR.rotation.x) * k2;
+        this.armL.pivot.rotation.x += (-0.25 - this.armL.pivot.rotation.x) * k2;
+        this.armR.pivot.rotation.x += (-0.25 - this.armR.pivot.rotation.x) * k2;
+        this.armL.pivot.rotation.z += (0.45 - this.armL.pivot.rotation.z) * k2;
+        this.armR.pivot.rotation.z += (-0.45 - this.armR.pivot.rotation.z) * k2;
+        this.torsoPivot.rotation.x += (-0.14 - this.torsoPivot.rotation.x) * k2;
+        this.torsoPivot.position.y += (-0.5 - this.torsoPivot.position.y) * k2;
+      }
+      this.torsoPivot.rotation.y += (0 - this.torsoPivot.rotation.y) * k2;
+      if (this.head) this.head.rotation.y += (0 - this.head.rotation.y) * k2;
+      return;
+    }
+    this._celBase = null;
 
     const speedRatio = st.speedRatio || 0;
     const moving = speedRatio > 0.02 && st.grounded !== false;
@@ -583,5 +616,57 @@ export class CharacterRig {
       this.orbitGroup.rotation.y += dt * 2.3;
       this.orbitGroup.position.y = 1.5 + Math.sin(this.time * 2.1) * 0.09;
     }
+
+    if (this.crown) {
+      this.crown.position.y = 3.32 + Math.sin(this.time * 2.5) * 0.07;
+      this.crown.rotation.y += dt * 0.8;
+    }
+
+    if (this.head) {
+      const look = st.lookAround ? Math.sin(this.time * 0.85) * 0.6 : 0;
+      this.head.rotation.y += (look - this.head.rotation.y) * Math.min(1, dt * 6);
+    }
+  }
+
+  addCrown(place) {
+    this.removeCrown();
+    const colors = [0xffd700, 0xc8ccd4, 0xcd8f4a];
+    const col = colors[place - 1] || colors[0];
+    const mat = new THREE.MeshStandardMaterial({
+      color: col, emissive: col, emissiveIntensity: 0.35, metalness: 0.7, roughness: 0.3
+    });
+    const g = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.34, 0.14, 8), mat);
+    g.add(base);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const sp = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 4), mat);
+      sp.position.set(Math.sin(a) * 0.24, 0.16, Math.cos(a) * 0.24);
+      g.add(sp);
+    }
+    g.position.y = 3.32;
+    this.torsoPivot.add(g);
+    this.crown = g;
+    this.crownMat = mat;
+  }
+
+  removeCrown() {
+    if (this.crown) {
+      this.torsoPivot.remove(this.crown);
+      this.crown = null;
+    }
+    if (this.crownMat) {
+      this.crownMat.dispose();
+      this.crownMat = null;
+    }
+  }
+
+  setName(name) {
+    this.name = name;
+    const tex = makeNameTexture(name, this.isPlayer ? '#8fd8ff' : '#ffb3a3');
+    const old = this.nameSprite.material.map;
+    this.nameSprite.material.map = tex;
+    this.nameSprite.material.needsUpdate = true;
+    if (old) old.dispose();
   }
 }

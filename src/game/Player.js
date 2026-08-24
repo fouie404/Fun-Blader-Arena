@@ -9,7 +9,7 @@ const TAP_WINDOW = 0.28;
 export class Player extends Fighter {
   constructor(game, pos) {
     super(game, {
-      name: 'You',
+      name: game.state.settings.playerName || 'You',
       isPlayer: true,
       colors: SKINS[game.state.settings.skin] || SKINS.knight,
       pos

@@ -685,6 +685,322 @@ kbd {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
 }
 
+#skin-action {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  margin-bottom: 10px;
+  min-height: 44px;
+}
+
+#skin-action .sa-info {
+  font-size: 14px;
+  color: #e8e2d5;
+  letter-spacing: 1px;
+}
+
+#skin-action .sa-info b {
+  color: #ffd76a;
+}
+
+/* name row */
+.name-row {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+#player-name {
+  width: 220px;
+  padding: 10px 14px;
+  background: rgba(10, 8, 14, 0.7);
+  border: 1px solid rgba(201, 162, 39, 0.45);
+  border-radius: 6px;
+  color: #ffe9ad;
+  font-size: 14px;
+  letter-spacing: 2px;
+  text-align: center;
+  outline: none;
+  font-family: inherit;
+}
+
+#player-name:focus {
+  border-color: #d8a02a;
+  box-shadow: 0 0 12px rgba(216, 160, 42, 0.3);
+}
+
+.menu-btn.tiny {
+  width: auto;
+  padding: 9px 14px;
+  font-size: 11px;
+  letter-spacing: 2px;
+  margin: 0;
+}
+
+/* server loading */
+#server-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 3, 7, 0.88);
+}
+
+.load-card {
+  text-align: center;
+}
+
+.load-title {
+  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  font-size: 34px;
+  letter-spacing: 8px;
+  color: #ffd76a;
+  text-shadow: 0 3px 10px #000;
+}
+
+.load-dots {
+  margin: 18px 0 10px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.load-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #d8a02a;
+  animation: dotpulse 0.9s ease-in-out infinite;
+}
+
+.load-dot:nth-child(2) { animation-delay: 0.15s; }
+.load-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes dotpulse {
+  0%, 100% { opacity: 0.25; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+.load-status {
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: #b9ad93;
+}
+
+/* match panel */
+#match-panel {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  background: rgba(10, 8, 14, 0.55);
+  border: 1px solid rgba(201, 162, 39, 0.4);
+  border-radius: 12px;
+  padding: 6px 16px 10px;
+}
+
+#round-timer {
+  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: #ffd76a;
+  text-shadow: 0 0 14px rgba(255, 180, 40, 0.5), 0 2px 4px #000;
+  line-height: 1.1;
+}
+
+#top3-list {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+  justify-content: center;
+}
+
+.t3-card {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 4px 9px;
+}
+
+.t3-icon {
+  width: 26px;
+  height: 31px;
+  image-rendering: pixelated;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.t3-medal {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: #14100c;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+}
+
+.t3-info {
+  text-align: left;
+  line-height: 1.25;
+}
+
+.t3-name {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #efe9da;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.t3-kills {
+  font-size: 10.5px;
+  color: #ffd76a;
+  font-weight: 700;
+}
+
+/* announcements */
+#announce-feed {
+  position: absolute;
+  top: 86px;
+  left: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  pointer-events: none;
+}
+
+.announce-row {
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: #bfe3ff;
+  text-shadow: 0 1px 3px #000;
+  background: rgba(8, 10, 20, 0.55);
+  border-left: 3px solid #7fd4ff;
+  padding: 4px 10px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+/* results */
+#results {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(30, 24, 8, 0.75), rgba(5, 4, 8, 0.92));
+}
+
+.res-card {
+  text-align: center;
+  padding: 30px 50px;
+  background: rgba(12, 10, 16, 0.85);
+  border: 1px solid rgba(201, 162, 39, 0.6);
+  border-radius: 16px;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.8);
+}
+
+.res-title {
+  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: 10px;
+  color: #ffd76a;
+  text-shadow: 0 0 24px rgba(255, 180, 40, 0.6), 0 3px 8px #000;
+}
+
+.res-sub {
+  margin-top: 4px;
+  font-size: 14px;
+  letter-spacing: 3px;
+  color: #b9ad93;
+  margin-bottom: 26px;
+}
+
+.res-podium {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 26px;
+  margin-bottom: 30px;
+}
+
+.res-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 170px;
+  padding: 18px 14px;
+  background: linear-gradient(#1d1812, #14100c);
+  border: 1px solid rgba(201, 162, 39, 0.4);
+  border-radius: 12px;
+}
+
+.res-col.first {
+  padding-top: 34px;
+  padding-bottom: 44px;
+  border-color: #ffd700;
+  box-shadow: 0 0 30px rgba(255, 215, 0, 0.25);
+  transform: translateY(-16px);
+}
+
+.res-col.second {
+  border-color: #c8ccd4;
+}
+
+.res-col.third {
+  border-color: #cd8f4a;
+}
+
+.res-crown {
+  width: 44px;
+  height: 16px;
+  border-radius: 4px 4px 0 0;
+  clip-path: polygon(0 100%, 0 40%, 20% 70%, 50% 0, 80% 70%, 100% 40%, 100% 100%);
+}
+
+.res-place {
+  font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.res-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #efe9da;
+  letter-spacing: 1px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.res-kills {
+  font-size: 13px;
+  color: #b9ad93;
+  letter-spacing: 2px;
+}
+
 #preview-bar .pb-name {
   font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
   font-size: 18px;
@@ -743,7 +1059,9 @@ kbd {
   margin-bottom: 3px;
 }
 
-#ad-modal {
+#ad-modal,
+#buy-modal,
+#leave-confirm {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -751,6 +1069,11 @@ kbd {
   align-items: center;
   justify-content: center;
   background: rgba(4, 3, 7, 0.85);
+}
+
+.warn-note {
+  color: #ff8a7a;
+  font-weight: 600;
 }
 
 .ad-card {

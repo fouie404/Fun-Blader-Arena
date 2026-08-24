@@ -2,13 +2,17 @@ import { SKINS } from '../game/Skins.js';
 import { THEMES } from '../world/Themes.js';
 
 export class Menu {
-  constructor({ onPlay, onResume, onQuitToMenu, onSettings, onGetCoins, onSpendCoins }) {
+  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onSetName, onRandomName, onStartOver }) {
     this.onSettings = onSettings;
     this.onGetCoins = onGetCoins || (() => 0);
     this.onSpendCoins = onSpendCoins || (() => false);
+    this.onSetName = onSetName || (() => {});
+    this.onRandomName = onRandomName || (() => 'player');
+    this.onStartOver = onStartOver || (() => {});
     this.currentPanel = 'home';
     this.adModal = null;
     this.buyModal = null;
+    this.resultsEl = null;
 
     this.root = document.createElement('div');
     this.root.id = 'menu';
@@ -47,7 +51,12 @@ export class Menu {
         <div class="game-subtitle">Fight &middot; Fall &middot; Rise Again</div>
 
         <div class="menu-panel" id="panel-home">
+          <div class="name-row">
+            <input type="text" id="player-name" maxlength="14" spellcheck="false" autocomplete="off" placeholder="PLAYER NAME" />
+            <button class="menu-btn tiny" id="btn-random-name">RANDOM</button>
+          </div>
           <button class="menu-btn" id="btn-play">PLAY</button>
+          <button class="menu-btn" id="btn-random">RANDOM SERVER</button>
           <button class="menu-btn" id="btn-skins">SKINS</button>
           <button class="menu-btn" id="btn-maps">MAPS</button>
           <button class="menu-btn" id="btn-settings">SETTINGS</button>
@@ -58,6 +67,7 @@ export class Menu {
           <div class="panel-title small">CHOOSE YOUR KNIGHT</div>
           <div class="coins-chip" id="coins-chip"></div>
           <div class="skin-hint">Your knight stands in the center &mdash; pick a skin and watch it change live. Earn coins with kills!</div>
+          <div id="skin-action"></div>
           <div class="skin-grid" id="skin-grid">${skinCards}</div>
           <button class="menu-btn small" id="btn-back-3">BACK</button>
         </div>
@@ -80,11 +90,6 @@ export class Menu {
             <label>Volume</label>
             <input type="range" id="set-vol" min="0" max="1" step="0.05" value="0.7" />
             <span class="set-val" id="val-vol">70%</span>
-          </div>
-          <div class="setting-row">
-            <label>Enemy Bots</label>
-            <input type="range" id="set-bots" min="1" max="15" step="1" value="10" />
-            <span class="set-val" id="val-bots">10</span>
           </div>
           <div class="setting-row">
             <label>Shadows</label>
@@ -120,22 +125,12 @@ export class Menu {
     document.body.appendChild(this.root);
     this.pushAd(this.root.querySelector('.adsbygoogle'));
 
-    this.pauseOverlay = document.createElement('div');
-    this.pauseOverlay.id = 'pause-overlay';
-    this.pauseOverlay.innerHTML = `
-      <div class="pause-card">
-        <div class="pause-title">PAUSED</div>
-        <div class="pause-sub">Click anywhere to resume</div>
-        <button class="menu-btn small" id="btn-quit">QUIT TO MENU</button>
-      </div>
-    `;
-    this.pauseOverlay.style.display = 'none';
-    document.body.appendChild(this.pauseOverlay);
+    this.pauseOverlay = null;
 
     const $ = (id) => this.root.querySelector(`#${id}`);
-    const $p = (id) => this.pauseOverlay.querySelector(`#${id}`);
 
     $('btn-play').addEventListener('click', () => onPlay());
+    $('btn-random').addEventListener('click', () => this.showServerLoading(onStartRandom));
     $('btn-skins').addEventListener('click', () => this.showPanel('skins'));
     $('btn-maps').addEventListener('click', () => this.showPanel('maps'));
     $('btn-settings').addEventListener('click', () => this.showPanel('settings'));
@@ -145,6 +140,13 @@ export class Menu {
     $('btn-back-3').addEventListener('click', () => this.showPanel('home'));
     $('btn-back-4').addEventListener('click', () => this.showPanel('home'));
 
+    const nameInput = $('player-name');
+    nameInput.addEventListener('change', () => this.onSetName(nameInput.value));
+    $('btn-random-name').addEventListener('click', () => {
+      nameInput.value = this.onRandomName();
+      this.onSetName(nameInput.value);
+    });
+
     this.skinGrid = $('skin-grid');
     this.skinGrid.addEventListener('click', (e) => {
       const btn = e.target.closest('.skin-card');
@@ -153,7 +155,6 @@ export class Menu {
         this.previewLockedSkin(btn.dataset.skin);
         return;
       }
-      this.hidePreviewBar();
       this.selectSkin(btn.dataset.skin);
       this.onSettings({ skin: btn.dataset.skin });
     });
@@ -176,23 +177,29 @@ export class Menu {
       $('val-vol').textContent = `${Math.round(vol.value * 100)}%`;
       this.onSettings({ volume: Number(vol.value) });
     });
-    const bots = $('set-bots');
-    bots.min = 1;
-    bots.max = 15;
-    bots.value = 10;
-    bots.addEventListener('input', () => {
-      $('val-bots').textContent = bots.value;
-      this.onSettings({ bots: Number(bots.value) });
-    });
     $('set-shadows').addEventListener('change', (e) => {
       this.onSettings({ shadows: e.target.checked });
     });
+  }
 
-    this.pauseOverlay.addEventListener('click', () => onResume());
-    $p('btn-quit').addEventListener('click', (e) => {
-      e.stopPropagation();
-      onQuitToMenu();
-    });
+  showServerLoading(onDone) {
+    if (this.serverLoading) return;
+    const ov = document.createElement('div');
+    ov.id = 'server-loading';
+    const dots = [0, 1, 2].map(() => '<span class="load-dot"></span>').join('');
+    ov.innerHTML = `
+      <div class="load-card">
+        <div class="load-title">FINDING SERVER</div>
+        <div class="load-dots">${dots}</div>
+        <div class="load-status">Searching nearby matches...</div>
+      </div>`;
+    document.body.appendChild(ov);
+    this.serverLoading = ov;
+    setTimeout(() => {
+      ov.remove();
+      this.serverLoading = null;
+      onDone();
+    }, 2000 + Math.random() * 1000);
   }
 
   getUnlocked() {
@@ -262,7 +269,6 @@ export class Menu {
           this.unlockSkin(skinId);
           ov.remove();
           this.adModal = null;
-          this.hidePreviewBar();
           this.selectSkin(skinId);
           this.onSettings({ skin: skinId });
         }, 700);
@@ -291,40 +297,31 @@ export class Menu {
     if (!s) return;
     this.selectSkin(id, true);
     this.onSettings({ skin: id });
-    this.showPreviewBar(id);
+    this.showSkinAction(id);
   }
 
-  showPreviewBar(id) {
+  showSkinAction(id) {
     const s = SKINS[id];
     if (!s) return;
-    this.hidePreviewBar();
-    const bar = document.createElement('div');
-    bar.id = 'preview-bar';
-    const actionLabel = s.premium ? 'WATCH AD TO UNLOCK' : `BUY - ${Number(s.price).toLocaleString()} COINS`;
-    bar.innerHTML = `
-      <span class="pb-name">${s.name}</span>
-      <span class="pb-sub">${s.premium ? 'Ad-locked skin - try it on!' : 'Previewing - buy to keep it'}</span>
-      <button class="menu-btn small" id="pb-action">${actionLabel}</button>
-      <button class="menu-btn small" id="pb-close">X</button>
+    const row = this.root.querySelector('#skin-action');
+    if (!row) return;
+    row.style.display = 'flex';
+    const label = s.premium ? 'WATCH AD TO UNLOCK' : `BUY NOW — ${Number(s.price).toLocaleString()} COINS`;
+    row.innerHTML = `
+      <span class="sa-info">Previewing <b>${s.name}</b> — ${s.premium ? 'unlock by watching an ad' : 'buy it to keep it forever'}</span>
+      <button class="menu-btn small" id="sa-action">${label}</button>
     `;
-    this.root.appendChild(bar);
-    this.previewBar = bar;
-    bar.querySelector('#pb-action').addEventListener('click', () => {
+    row.querySelector('#sa-action').addEventListener('click', () => {
       if (s.premium) this.showAdModal(id);
       else this.showBuyModal(id);
     });
-    bar.querySelector('#pb-close').addEventListener('click', () => {
-      this.hidePreviewBar();
-      const owned = this.lastAppliedSkin || 'knight';
-      this.selectSkin(owned);
-      this.onSettings({ skin: owned });
-    });
   }
 
-  hidePreviewBar() {
-    if (this.previewBar) {
-      this.previewBar.remove();
-      this.previewBar = null;
+  hideSkinAction() {
+    const row = this.root.querySelector('#skin-action');
+    if (row) {
+      row.style.display = 'none';
+      row.innerHTML = '';
     }
   }
 
@@ -338,7 +335,7 @@ export class Menu {
     this.currentPanel = which;
     this.root.classList.toggle('skins-mode', which === 'skins');
     this.root.classList.toggle('maps-mode', which === 'maps');
-    if (which !== 'skins') this.hidePreviewBar();
+    if (which !== 'skins') this.hideSkinAction();
     const $ = (id) => this.root.querySelector(`#${id}`);
     $('panel-home').style.display = which === 'home' ? 'grid' : 'none';
     $('panel-skins').style.display = which === 'skins' ? 'block' : 'none';
@@ -392,7 +389,6 @@ export class Menu {
         ov.remove();
         this.buyModal = null;
         this.refreshCoins();
-        this.hidePreviewBar();
         this.selectSkin(skinId);
         this.onSettings({ skin: skinId });
       } else {
@@ -408,28 +404,64 @@ export class Menu {
     $('val-sens').textContent = Number(s.sensitivity).toFixed(1);
     $('set-vol').value = s.volume;
     $('val-vol').textContent = `${Math.round(s.volume * 100)}%`;
-    $('set-bots').value = s.bots;
-    $('val-bots').textContent = String(s.bots);
     $('set-shadows').checked = s.shadows;
+    const nameInput = $('player-name');
+    if (document.activeElement !== nameInput) nameInput.value = s.playerName || '';
     this.selectSkin(s.skin || 'knight');
     this.selectMap(s.map || 'citadel');
   }
 
+  showResults(rows, onStartOver) {
+    if (this.resultsEl) return;
+    const medals = ['#ffd700', '#c8ccd4', '#cd8f4a'];
+    const places = [
+      { r: rows[1], p: 2, cls: 'second' },
+      { r: rows[0], p: 1, cls: 'first' },
+      { r: rows[2], p: 3, cls: 'third' }
+    ];
+    const ov = document.createElement('div');
+    ov.id = 'results';
+    ov.innerHTML = `
+      <div class="res-card">
+        <div class="res-title">MATCH OVER</div>
+        <div class="res-sub">Top fighters of the round</div>
+        <div class="res-podium">
+          ${places
+            .map(({ r, p, cls }) => {
+              if (!r) return '<div class="res-col empty"></div>';
+              return `
+                <div class="res-col ${cls}">
+                  <div class="res-crown" style="background:linear-gradient(180deg,${medals[p - 1]},#6a5a20)"></div>
+                  <div class="res-place" style="color:${medals[p - 1]}">#${p}</div>
+                  <div class="res-name">${r.name}</div>
+                  <div class="res-kills">${r.kills} KILLS</div>
+                </div>`;
+            })
+            .join('')}
+        </div>
+        <button class="menu-btn" id="btn-start-over">START OVER</button>
+      </div>`;
+    document.body.appendChild(ov);
+    this.resultsEl = ov;
+    ov.querySelector('#btn-start-over').addEventListener('click', () => {
+      this.hideResults();
+      onStartOver();
+    });
+  }
+
+  hideResults() {
+    if (this.resultsEl) {
+      this.resultsEl.remove();
+      this.resultsEl = null;
+    }
+  }
+
   hideAll() {
     this.root.style.display = 'none';
-    this.pauseOverlay.style.display = 'none';
   }
 
   showMain() {
     this.root.style.display = 'flex';
     this.showPanel('home');
-  }
-
-  showPause() {
-    this.pauseOverlay.style.display = 'flex';
-  }
-
-  hidePause() {
-    this.pauseOverlay.style.display = 'none';
   }
 }

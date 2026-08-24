@@ -22,7 +22,7 @@ const TYPES = ['aggressive', 'balanced', 'defensive'];
 const NAME_A = ['dark', 'shadow', 'wolf', 'iron', 'storm', 'blaze', 'ghost', 'night', 'razor', 'silent', 'toxic', 'frost', 'wild', 'cyber', 'lucky', 'angry', 'epic', 'sneaky', 'mad', 'pro', 'salty', 'hyper'];
 const NAME_B = ['john', 'slayer', 'blade', 'x', 'king', 'lord', 'hunter', 'reaper', 'ninja', 'gamer', 'max', 'sam', 'alex', 'rex', 'kai', 'fox', 'bear', 'mann', 'dilina', 'wow'];
 
-function fakeName(used) {
+export function fakeName(used) {
   for (let i = 0; i < 25; i++) {
     let n;
     const r = Math.random();
@@ -76,6 +76,15 @@ export class Enemy extends Fighter {
     this.dashTimer = randRange(2, 5);
     this.dodgeJumpT = 0;
     this._stuckT = 0;
+    this.fleeAt = Infinity;
+    this.fleeT = 0;
+    this.afkT = 0;
+    this.lookAround = false;
+    this.hopperT = 0;
+    this.hopDirT = 0;
+    this._hopCd = 0;
+    this._afkBase = 0;
+    this._t = Math.random() * 10;
     this.slotHeld = false;
 
     this.target = null;
@@ -109,11 +118,29 @@ export class Enemy extends Fighter {
   takeDamage(amount, attacker, hitPoint) {
     const res = super.takeDamage(amount, attacker, hitPoint);
     if (res && attacker && attacker !== this && !attacker.dead) {
-      this.retaliateTarget = attacker;
+      if (this.state === 'afk') {
+        this.state = 'chase';
+      }
+      if (this.state === 'hopper' && Math.random() < 0.5) {
+        this.state = 'chase';
+        this.reactT = 0.2;
+      }
+      const isCurrentTarget = this.target === attacker;
+      if (!isCurrentTarget && Math.random() < 0.6) {
+        this.retaliateTarget = attacker;
+        this.target = attacker;
+        this.retargetT = randRange(3, 5);
+      } else if (!this.retaliateTarget || Math.random() < 0.3) {
+        this.retaliateTarget = attacker;
+      }
       this.retaliateT = 6;
-      if (this.state === 'wander') {
+      if (this.state === 'wander' || this.state === 'afk') {
         this.state = 'chase';
         this.reactT = randRange(0.1, 0.5);
+      }
+      if (this.state === 'flee' && Math.random() < 0.4) {
+        this.state = 'combat';
+        this.attackTimer = 0.2;
       }
     }
     return res;
@@ -161,6 +188,7 @@ export class Enemy extends Fighter {
   }
 
   update(dt) {
+    this._t += dt;
     const alive = this.updateCommon(dt);
     if (!alive) return;
 
@@ -172,7 +200,42 @@ export class Enemy extends Fighter {
       if (this.retaliateT <= 0) this.retaliateTarget = null;
     }
     this.retargetT -= dt;
+    if (this.target && !this.target.dead) {
+      const tdx = this.target.pos.x - this.pos.x;
+      const tdz = this.target.pos.z - this.pos.z;
+      if (Math.hypot(tdx, tdz) > 30) {
+        this.target = null;
+        this.retaliateTarget = null;
+        this.retaliateT = 0;
+      }
+    }
     const targetInvalid = !this.target || this.target.dead;
+
+    if (playing && this.retargetT <= 0) {
+      this.retargetT = randRange(1.5, 2.5);
+      let nearest = null;
+      let nearestD = Infinity;
+      for (const f of g.combat.fighters) {
+        if (f === this || f.dead) continue;
+        const ddx = f.pos.x - this.pos.x;
+        const ddz = f.pos.z - this.pos.z;
+        const d2 = ddx * ddx + ddz * ddz;
+        if (d2 < nearestD) {
+          nearestD = d2;
+          nearest = f;
+        }
+      }
+      if (nearest) {
+        const curD = targetInvalid ? Infinity : Math.hypot(this.target.pos.x - this.pos.x, this.target.pos.z - this.pos.z);
+        if (targetInvalid || nearest !== this.target) {
+          const nearD = Math.sqrt(nearestD);
+          if (targetInvalid || nearD + 1.2 < curD || (this.state !== 'combat' && nearD < curD)) {
+            this.target = nearest;
+          }
+        }
+      }
+    }
+
     if ((playing && targetInvalid && this.retargetT <= 0) || (playing && targetInvalid && this.state !== 'wander')) {
       if (this.retaliateTarget && !this.retaliateTarget.dead) this.target = this.retaliateTarget;
       else this.acquireTarget();
@@ -201,8 +264,23 @@ export class Enemy extends Fighter {
         const wdx = this.wanderTarget.x - this.pos.x;
         const wdz = this.wanderTarget.z - this.pos.z;
         const wd = Math.hypot(wdx, wdz);
-        if (wd < 2 || this.thinkT <= 0) this.pickWanderTarget();
-        else {
+        if (wd < 2 || this.thinkT <= 0) {
+          this.pickWanderTarget();
+          const roll = Math.random();
+          if (roll < 0.18) {
+            this.state = 'afk';
+            this.afkT = randRange(3, 8);
+            this._afkBase = this.yaw;
+            break;
+          }
+          if (roll < 0.33) {
+            this.state = 'hopper';
+            this.hopperT = randRange(3, 7);
+            this.hopDirT = 0;
+            this._hopCd = 0;
+            break;
+          }
+        } else {
           _intent.set(wdx / wd, 0, wdz / wd).multiplyScalar(0.72);
           faceYaw = Math.atan2(_intent.x, _intent.z);
         }
@@ -210,6 +288,64 @@ export class Enemy extends Fighter {
           this.state = 'chase';
           this.reactT = randRange(0.2, 0.8);
           g.audio.tone({ f0: 180, f1: 140, dur: 0.12, type: 'square', gain: 0.05 });
+        }
+        break;
+      }
+
+      case 'afk': {
+        this.afkT -= dt;
+        faceYaw = this._afkBase + Math.sin(this._t * 0.8) * 0.9;
+        if (this.afkT <= 0) {
+          this.state = 'wander';
+          this.pickWanderTarget();
+          break;
+        }
+        if (hasTarget && distP < 9) {
+          this.state = 'chase';
+          this.reactT = 0.1;
+        }
+        break;
+      }
+
+      case 'hopper': {
+        this.hopperT -= dt;
+        this._hopCd -= dt;
+        if (this.hopperT <= 0) {
+          this.state = 'wander';
+          this.pickWanderTarget();
+          break;
+        }
+        this.hopDirT -= dt;
+        if (this.hopDirT <= 0) {
+          const a = Math.random() * Math.PI * 2;
+          this._hopDir = this._hopDir || new THREE.Vector3();
+          this._hopDir.set(Math.sin(a), 0, Math.cos(a));
+          this.hopDirT = randRange(0.6, 1.3);
+        }
+        _intent.copy(this._hopDir);
+        sprint = true;
+        faceYaw = Math.atan2(_intent.x, _intent.z);
+        if (this.grounded && this._hopCd <= 0) {
+          this.dodgeJumpT = 0.15;
+          this._hopCd = 0.28;
+        }
+        break;
+      }
+
+      case 'flee': {
+        this.fleeT -= dt;
+        if (!hasTarget || this.fleeT <= 0 || distP > 25) {
+          this.lookAround = false;
+          this.state = hasTarget ? 'combat' : 'wander';
+          this.attackTimer = 0.3;
+          break;
+        }
+        faceYaw = Math.atan2(-dx, -dz);
+        sprint = true;
+        _intent.set(-dx / distP, 0, -dz / distP);
+        if (distP < 5) {
+          _intent.x += (-dz / distP) * this.strafeDir * 0.7;
+          _intent.z += (dx / distP) * this.strafeDir * 0.7;
         }
         break;
       }
@@ -231,10 +367,13 @@ export class Enemy extends Fighter {
           if (this.elite) {
             this.state = 'combat';
             this.attackTimer = Math.min(this.attackTimer, 0.3);
+            if (Math.random() < 0.3) this.fleeAt = randRange(2, 5);
           } else if (g.requestSlot(this)) {
             this.slotHeld = true;
             this.state = 'combat';
             this.attackTimer = randRange(0.15, 0.5);
+            if (Math.random() < 0.3) this.fleeAt = randRange(2, 5);
+            else this.fleeAt = Infinity;
           } else {
             this.state = 'circle';
           }
@@ -304,6 +443,16 @@ export class Enemy extends Fighter {
           (dz / distP) * radial + (dx / distP) * this.strafeDir * this.p.strafeAmt
         );
         sprint = distP > this.p.keep + 3;
+
+        if (this.fleeAt !== undefined && this.fleeAt !== Infinity) {
+          this.fleeAt -= dt;
+          if (this.fleeAt <= 0 && distP < this.p.engage + 4) {
+            this.state = 'flee';
+            this.fleeT = 4;
+            this.fleeAt = Infinity;
+            break;
+          }
+        }
 
         if (this.dashTimer <= 0 && distP > this.p.engage + 1.5) {
           if (Math.random() < (this.elite ? 0.7 : 0.5)) this.tryDash(dx / distP, dz / distP);
@@ -387,7 +536,7 @@ export class Enemy extends Fighter {
     }
     this.rig.setYaw(this.yaw);
 
-    this.syncRigAnim(dt, {});
+    this.syncRigAnim(dt, { lookAround: this.state === 'afk' });
   }
 
   onRespawnReady() {

@@ -8,6 +8,13 @@ export class HUD {
         <div class="hp-bar"><div id="hp-fill"></div></div>
       </div>
 
+      <div id="match-panel">
+        <div id="round-timer">8:00</div>
+        <div id="top3-list"></div>
+      </div>
+
+      <div id="announce-feed"></div>
+
       <div class="score-panel">
         <div><span class="k">KILLS:</span> <span id="kills-val">0</span></div>
         <div><span class="d">DEATHS:</span> <span id="deaths-val">0</span></div>
@@ -64,6 +71,11 @@ export class HUD {
     this.killsVal = q('#kills-val');
     this.deathsVal = q('#deaths-val');
     this.coinsVal = q('#coins-val');
+    this.roundTimer = q('#round-timer');
+    this.top3List = q('#top3-list');
+    this.announceFeed = q('#announce-feed');
+    this._lastTimer = '';
+    this._lastTop = '';
     this.crosshair = q('#crosshair');
     this.vignette = q('#dmg-vignette');
     this.elimination = q('#elimination');
@@ -93,6 +105,63 @@ export class HUD {
 
   setCoins(n) {
     this.coinsVal.textContent = Number(n || 0).toLocaleString();
+  }
+
+  setRoundTimer(sec) {
+    const s = Math.max(0, Math.ceil(sec));
+    const txt = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    if (txt !== this._lastTimer) {
+      this._lastTimer = txt;
+      this.roundTimer.textContent = txt;
+      if (s <= 30 && s > 0) {
+        this.roundTimer.animate(
+          [{ transform: 'scale(1.25)', color: '#ff8a7a' }, { transform: 'scale(1)', color: '#ffd76a' }],
+          { duration: 400, easing: 'ease-out' }
+        );
+      }
+    }
+  }
+
+  setTop3(entries) {
+    const key = entries.map((r) => `${r.name}:${r.kills}`).join('|');
+    if (key === this._lastTop) return;
+    this._lastTop = key;
+    const colors = ['#ffd700', '#c8ccd4', '#cd8f4a'];
+    let html = '';
+    for (let i = 0; i < 3; i++) {
+      const r = entries[i];
+      if (!r) continue;
+      const icon = r.icon ? `<img class="t3-icon" src="${r.icon}" alt=""/>` : '<span class="t3-icon"></span>';
+      html += `
+        <div class="t3-card">
+          <div class="t3-medal" style="background:${colors[i]}">${i + 1}</div>
+          ${icon}
+          <div class="t3-info">
+            <div class="t3-name">${r.name}</div>
+            <div class="t3-kills">${r.kills} KILLS</div>
+          </div>
+        </div>`;
+    }
+    this.top3List.innerHTML = html;
+  }
+
+  announce(text) {
+    const row = document.createElement('div');
+    row.className = 'announce-row';
+    row.textContent = text;
+    this.announceFeed.appendChild(row);
+    while (this.announceFeed.children.length > 4) {
+      this.announceFeed.firstChild.remove();
+    }
+    row.animate(
+      [
+        { opacity: 0, transform: 'translateX(-14px)' },
+        { opacity: 1, transform: 'translateX(0)', offset: 0.15 },
+        { opacity: 1, offset: 0.8 },
+        { opacity: 0 }
+      ],
+      { duration: 4500, easing: 'ease-out' }
+    ).onfinish = () => row.remove();
   }
 
   hitMarker(blocked) {

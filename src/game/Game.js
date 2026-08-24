@@ -4,7 +4,7 @@ import { CollisionSystem } from './CollisionSystem.js';
 import { SpawnSystem } from './SpawnSystem.js';
 import { CombatSystem } from './CombatSystem.js';
 import { Player } from './Player.js';
-import { Enemy } from './Enemy.js';
+import { Enemy, fakeName } from './Enemy.js';
 import { SKINS } from './Skins.js';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera.js';
 import { Environment } from '../world/Environment.js';
@@ -37,6 +37,19 @@ export class Game {
     this.state = new GameState();
     this.audio = new AudioManager();
 
+    try {
+      const un = JSON.parse(localStorage.getItem('fba-unlocked-skins') || '[]');
+      const sk = SKINS[this.state.settings.skin];
+      if (!sk || ((sk.premium || sk.price) && !un.includes(this.state.settings.skin))) {
+        this.state.settings.skin = 'knight';
+      }
+    } catch (e) {
+      this.state.settings.skin = 'knight';
+    }
+    if (!this.state.settings.playerName) {
+      this.state.settings.playerName = fakeName(new Set());
+    }
+
     this.input = new Input(this.renderer.domElement);
 
     this.collision = new CollisionSystem(46.4);
@@ -49,12 +62,14 @@ export class Game {
     this.hud = new HUD();
     this.scoreboard = new Scoreboard();
     this.menu = new Menu({
-      onPlay: () => this.start(),
-      onResume: () => this.resumeFromPause(),
-      onQuitToMenu: () => this.quitToMenu(),
+      onPlay: () => this.startMatch('play'),
+      onStartRandom: () => this.startMatch('random'),
       onSettings: (partial) => this.updateSettings(partial),
       onGetCoins: () => this.state.coins,
-      onSpendCoins: (n) => this.spendCoins(n)
+      onSpendCoins: (n) => this.spendCoins(n),
+      onSetName: (n) => this.setPlayerName(n),
+      onRandomName: () => fakeName(new Set()),
+      onStartOver: () => this.startOver()
     });
     this.menu.applySettings(this.state.settings);
     this.cameraRig.sensitivity = this.state.settings.sensitivity;
@@ -70,29 +85,34 @@ export class Game {
     this._botCounter = 0;
     this.slots = { used: 0, max: 3 };
     this.time = 0;
-    this.paused = false;
     this._lastCd = -1;
     this._sbTimer = 0;
     this._errShown = false;
     this._auraT = 0;
+    this._hudT = 0;
+    this._topT = 0;
+    this.ceremonyT = 0;
+    this.ceremonyFighters = [];
+    this.top3 = [];
+    this._iconCache = new Map();
+    this.state.targetBots = 14;
+    this.state.joinTimer = 0;
+    this.state.leaveTimer = 0;
+    this.state.pendingJoinT = 0;
 
     this.clock = new THREE.Clock();
     this.renderer.setAnimationLoop(() => this.frame());
 
     this.player = new Player(this, new THREE.Vector3(0, 0, 0));
-    this.usedNames = new Set(['you']);
-    const botCount = Math.max(1, Math.min(15, this.state.settings.bots || 10));
-    for (let i = 0; i < botCount; i++) this.createEnemy(i);
-    this.createEliteBots();
+    this.usedNames.add((this.state.settings.playerName || 'you').toLowerCase());
+    for (let i = 0; i < 12; i++) this.createEnemy(i);
 
     this.hud.setCoins(this.state.coins);
+    this.hud.setRoundTimer(this.state.roundLeft);
 
-    this.input.onLockChange = (locked) => {
-      if (!locked && this.state.phase === 'playing' && this.player && !this.player.dead) {
-        this.paused = true;
-        this.menu.showPause();
-      }
-    };
+    this.renderer.domElement.addEventListener('click', () => {
+      if (this.state.phase === 'playing' && !this.input.locked) this.lockPointer();
+    });
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -141,9 +161,56 @@ export class Game {
     return true;
   }
 
-  start() {
+  startMatch(mode) {
     this.audio.ensure();
     this.audio.uiClick();
+
+    const resumeExisting = mode === 'play' && this.state.roundRunning && this.enemies.length > 0;
+
+    if (!resumeExisting) {
+      for (const b of this.enemies) {
+        this.combat.unregister(b);
+        this.scene.remove(b.rig.root);
+        b.rig.dispose();
+      }
+      this.enemies.length = 0;
+      this.slots.used = 0;
+
+      let timer;
+      if (mode === 'random') {
+        timer = Math.random() < 0.2 ? 180 + Math.floor(Math.random() * 61) : 300 + Math.floor(Math.random() * 121);
+        this.state.targetBots = 10 + Math.floor(Math.random() * 6);
+      } else {
+        timer = 480;
+        this.state.targetBots = 14;
+      }
+      this.state.roundLeft = timer;
+      this.state.roundRunning = true;
+      this.state.roundPhase = 'playing';
+
+      const elapsedMin = (480 - timer) / 60;
+      const proTotal = 4 + Math.floor(Math.random() * 4);
+      const proSkins = Object.keys(SKINS).filter((k) => SKINS[k].premium || SKINS[k].price);
+      for (let i = proSkins.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [proSkins[i], proSkins[j]] = [proSkins[j], proSkins[i]];
+      }
+      const initial = mode === 'random'
+        ? Math.max(6, this.state.targetBots - Math.floor(Math.random() * 5))
+        : 4 + Math.floor(Math.random() * 4);
+
+      for (let i = 0; i < initial; i++) {
+        const isPro = i < proTotal;
+        const skinId = isPro ? proSkins[i % proSkins.length] : FREE_SKINS[Math.floor(Math.random() * FREE_SKINS.length)];
+        const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 8 }));
+        const bot = new Enemy(this, this._botCounter++, this.spawn.getSpawn(avoid), SKINS[skinId], skinId, isPro);
+        if (mode === 'random') {
+          bot.stats.kills = Math.max(0, Math.round(elapsedMin * 10 * (0.2 + Math.random())));
+          bot.stats.deaths = Math.round(bot.stats.kills * (0.3 + Math.random() * 0.7));
+        }
+        this.enemies.push(bot);
+      }
+    }
 
     if (!this.player) {
       const avoid = this.enemies.filter((e) => !e.dead).map((e) => ({ pos: e.pos, radius: 10 }));
@@ -160,18 +227,46 @@ export class Game {
     }
 
     this.state.phase = 'playing';
+    this.state.joinTimer = resumeExisting ? 4 : randRange(4, 10);
+    this.state.leaveTimer = randRange(60, 120);
+    this.state.pendingJoinT = 0;
     this.menu.hideAll();
     this.hud.setPlaying(true);
     this.hud.setHP(this.player.hp, this.player.maxHp);
     this.hud.setScore(this.player.stats.kills, this.player.stats.deaths);
+    this.hud.setRoundTimer(this.state.roundLeft);
+    this.hud.announce(`${this.player.stats.name} has joined the server`);
     this.cameraRig.snap(this.player.pos);
     this.lockPointer();
   }
 
+  addBotWithAnnounce() {
+    if (this.enemies.length >= this.state.targetBots) return;
+    const skinId = FREE_SKINS[Math.floor(Math.random() * FREE_SKINS.length)];
+    const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 8 }));
+    const bot = new Enemy(this, this._botCounter++, this.spawn.getSpawn(avoid), SKINS[skinId], skinId, false);
+    this.enemies.push(bot);
+    this.hud.announce(`${bot.stats.name} has joined the server`);
+  }
+
+  removeLowestBot() {
+    let victim = null;
+    for (const b of this.enemies) {
+      if (b.dead) continue;
+      if (!victim || b.stats.kills < victim.stats.kills) victim = b;
+    }
+    if (!victim) return;
+    this.hud.announce(`${victim.stats.name} has left the server`);
+    this.combat.unregister(victim);
+    this.scene.remove(victim.rig.root);
+    victim.rig.dispose();
+    const idx = this.enemies.indexOf(victim);
+    if (idx >= 0) this.enemies.splice(idx, 1);
+    this.state.pendingJoinT = 3;
+  }
+
   quitToMenu() {
     this.audio.uiClick();
-    this.paused = false;
-    this.menu.hidePause();
     this.menu.showMain();
     this.state.phase = 'menu';
     this.hud.hideDeath();
@@ -206,17 +301,30 @@ export class Game {
     this.input.lock();
   }
 
-  resumeFromPause() {
-    this.lockPointer();
-    setTimeout(() => {
-      if (this.input.locked) {
-        this.paused = false;
-        this.menu.hidePause();
-      } else if (this.state.phase === 'playing' && !this.paused) {
-        this.paused = true;
-        this.menu.showPause();
-      }
-    }, 180);
+  fighterIcon(f) {
+    if (this._iconCache.has(f.stats.name)) return this._iconCache.get(f.stats.name);
+    const c = document.createElement('canvas');
+    c.width = 40;
+    c.height = 48;
+    const ctx = c.getContext('2d');
+    const prim = '#' + f.rig.matPrimary.color.getHexString();
+    const sec = '#' + f.rig.matSecondary.color.getHexString();
+    ctx.fillStyle = '#d9b38c';
+    ctx.fillRect(14, 6, 12, 10);
+    ctx.fillStyle = sec;
+    ctx.fillRect(12, 3, 16, 5);
+    ctx.fillStyle = prim;
+    ctx.fillRect(11, 18, 18, 15);
+    ctx.fillRect(6, 18, 5, 11);
+    ctx.fillRect(29, 18, 5, 11);
+    ctx.fillStyle = '#2e2a33';
+    ctx.fillRect(13, 34, 6, 12);
+    ctx.fillRect(21, 34, 6, 12);
+    ctx.fillStyle = '#d7dee8';
+    ctx.fillRect(34, 12, 3, 20);
+    const url = c.toDataURL();
+    this._iconCache.set(f.stats.name, url);
+    return url;
   }
 
   emitAura(dt) {
@@ -243,14 +351,18 @@ export class Game {
     this.cameraRig.sensitivity = s.sensitivity;
     this.audio.setVolume(s.volume);
     this.applyShadows(s.shadows);
-    if (partial.skin !== undefined && this.player) {
-      this.player.applySkin(s.skin);
+    if (partial.skin !== undefined) {
+      try { localStorage.setItem('fba-skin', s.skin); } catch (e) { /* ignore */ }
+      if (this.player) this.player.applySkin(s.skin);
     }
     if (partial.map !== undefined) {
       this.applyMap(s.map);
     }
     if (partial.bots !== undefined) {
       this.setBotCount(Math.max(1, Math.min(15, Math.round(partial.bots))));
+    }
+    if (partial.roundMinutes !== undefined) {
+      this.state.settings.roundMinutes = partial.roundMinutes;
     }
   }
 
@@ -264,13 +376,6 @@ export class Game {
     const theme = THEMES[id];
     this.env = new Environment(this.scene, theme);
     this.arena = new Arena(this.scene, this.collision, theme);
-  }
-
-  applyHostBots(n) {
-    const c = Math.max(1, Math.min(15, Math.round(n)));
-    this.state.settings.bots = c;
-    this.setBotCount(c);
-    this.menu.applySettings(this.state.settings);
   }
 
   setBotCount(n) {
@@ -335,7 +440,7 @@ export class Game {
     this.time += dt;
 
     try {
-      if (!this.paused) this.tick(dt);
+      this.tick(dt);
       this.sanitize();
       this.renderer.render(this.scene, this.camera);
     } catch (err) {
@@ -382,6 +487,37 @@ export class Game {
     this.arena.update(dt, this.time);
     this.env.update(dt);
 
+    if (this.state.roundPhase === 'ceremony') {
+      this.ceremonyT -= dt;
+      for (const f of this.ceremonyFighters) {
+        if (!f || !f.rig) continue;
+        f.rig.update(dt, {
+          celebrate: !!f._ceremonyCelebrate,
+          sit: !f._ceremonyCelebrate,
+          grounded: true,
+          speedRatio: 0,
+          blocking: false,
+          attack: null,
+          invulnBlink: false,
+          dash: 0,
+          land: 0
+        });
+      }
+      this.combat.update(dt);
+      this.cameraRig.update(dt, this.player ? this.player.pos : null, 'play');
+      if (this.ceremonyT <= 0) {
+        this.state.roundPhase = 'results';
+        this.menu.showResults(this.top3, () => this.startOver());
+        this.input.unlock();
+      }
+      return;
+    }
+
+    if (this.state.roundPhase === 'results') {
+      this.combat.update(dt);
+      return;
+    }
+
     let camMode = 'menu';
     if (this.player) {
       if (this.state.phase === 'menu') {
@@ -412,7 +548,73 @@ export class Game {
     this.combat.update(dt);
     this.cameraRig.update(dt, this.player ? this.player.pos : null, camMode);
 
-    const wantBoard = !!this.input.keys.Tab && this.state.phase === 'playing' && !this.paused;
+    if (this.state.roundRunning && this.state.phase === 'playing') {
+      this.state.roundLeft -= dt;
+      if (this.state.roundLeft <= 0) {
+        this.state.roundLeft = 0;
+        this.hud.setRoundTimer(0);
+        this.beginCeremony();
+        return;
+      }
+      this._hudT -= dt;
+      if (this._hudT <= 0) {
+        this._hudT = 0.25;
+        this.hud.setRoundTimer(this.state.roundLeft);
+      }
+      this._topT -= dt;
+      if (this._topT <= 0) {
+        this._topT = 0.5;
+        const byName = new Map();
+        for (const f of [this.player, ...this.enemies]) {
+          if (f) byName.set(f.stats.name, f);
+        }
+        const top = this.state
+          .rows()
+          .slice(0, 3)
+          .map((r) => {
+            const f = byName.get(r.name);
+            return { name: r.name, kills: r.kills, icon: f ? this.fighterIcon(f) : null };
+          });
+        this.hud.setTop3(top);
+
+        const placeByName = new Map();
+        top.forEach((r, i) => {
+          if (r.kills > 0) placeByName.set(r.name, i + 1);
+        });
+        for (const f of [this.player, ...this.enemies]) {
+          if (!f) continue;
+          const place = placeByName.get(f.stats.name) || 0;
+          if ((f._crownPlace || 0) !== place) {
+            f._crownPlace = place;
+            if (place > 0) f.rig.addCrown(place);
+            else f.rig.removeCrown();
+          }
+        }
+      }
+
+      if (this.enemies.length < this.state.targetBots) {
+        this.state.joinTimer -= dt;
+        if (this.state.joinTimer <= 0) {
+          this.addBotWithAnnounce();
+          this.state.joinTimer = randRange(4, 10);
+        }
+      } else {
+        this.state.leaveTimer -= dt;
+        if (this.state.leaveTimer <= 0) {
+          this.removeLowestBot();
+          this.state.leaveTimer = randRange(60, 120);
+        }
+      }
+      if (this.state.pendingJoinT > 0) {
+        this.state.pendingJoinT -= dt;
+        if (this.state.pendingJoinT <= 0) {
+          this.state.pendingJoinT = 0;
+          this.addBotWithAnnounce();
+        }
+      }
+    }
+
+    const wantBoard = !!this.input.keys.Tab && this.state.phase === 'playing';
     if (wantBoard) {
       this._sbTimer -= dt;
       if (!this.scoreboard.visible || this._sbTimer <= 0) {
@@ -424,7 +626,99 @@ export class Game {
     }
 
     if (this.input.pressed.has('KeyM') && this.state.phase === 'playing') {
-      this.quitToMenu();
+      this.showLeaveConfirm();
     }
+  }
+
+  showLeaveConfirm() {
+    if (this._leaveConfirm) return;
+    this.input.unlock();
+    const ov = document.createElement('div');
+    ov.id = 'leave-confirm';
+    ov.innerHTML = `
+      <div class="ad-card">
+        <div class="ad-title">LEAVE SERVER?</div>
+        <div class="ad-sub">Would you like to go back to menu?<br/><span class="warn-note">Notice: you will leave this server.</span></div>
+        <div class="srv-actions">
+          <button class="menu-btn small" id="lc-yes">YES</button>
+          <button class="menu-btn small" id="lc-no">NO</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    this._leaveConfirm = ov;
+    ov.querySelector('#lc-yes').addEventListener('click', () => {
+      ov.remove();
+      location.reload();
+    });
+    ov.querySelector('#lc-no').addEventListener('click', () => {
+      ov.remove();
+      this._leaveConfirm = null;
+      this.lockPointer();
+    });
+  }
+
+  beginCeremony() {
+    const rows = this.state.rows().slice(0, 3);
+    this.top3 = rows;
+    const names = new Set(rows.map((r) => r.name));
+    this.state.roundPhase = 'ceremony';
+    this.ceremonyT = 5;
+    this.ceremonyFighters = [];
+
+    for (const f of [this.player, ...this.enemies]) {
+      if (!f) continue;
+      if (f.dead) {
+        const sp = this.spawn.getSpawn([{ pos: this.player.pos, radius: 8 }]);
+        f.respawn(sp);
+      }
+      const isTop = names.has(f.stats.name) && f.stats.kills > 0;
+      f._ceremonyCelebrate = isTop;
+      f._crownPlace = isTop ? rows.findIndex((r) => r.name === f.stats.name) + 1 : 0;
+      if (isTop) {
+        f.rig.addCrown(f._crownPlace);
+      }
+      this.ceremonyFighters.push(f);
+    }
+    this.audio.tone({ f0: 523, dur: 0.15, type: 'triangle', gain: 0.2 });
+    this.audio.tone({ f0: 659, dur: 0.15, type: 'triangle', gain: 0.2, delay: 0.15 });
+    this.audio.tone({ f0: 784, dur: 0.3, type: 'triangle', gain: 0.22, delay: 0.3 });
+  }
+
+  startOver() {
+    this.menu.hideResults();
+    for (const f of [this.player, ...this.enemies]) {
+      if (!f) continue;
+      f.stats.kills = 0;
+      f.stats.deaths = 0;
+      f.rig.removeCrown();
+      f._ceremonyCelebrate = false;
+      f._crownPlace = 0;
+      const avoid = this.enemies
+        .filter((o) => o !== f && !o.dead)
+        .map((o) => ({ pos: o.pos, radius: 9 }));
+      f.respawn(this.spawn.getSpawn(avoid));
+    }
+    this.state.roundLeft = 480;
+    this.state.roundPhase = 'playing';
+    this.state.roundRunning = true;
+    this.state.targetBots = 14;
+    this.state.phase = 'playing';
+    this.hud.setScore(0, 0);
+    this.hud.setRoundTimer(this.state.roundLeft);
+    this.hud.setTop3([]);
+    this.cameraRig.snap(this.player.pos);
+    this.lockPointer();
+  }
+
+  setPlayerName(raw) {
+    const name = String(raw || '').trim().slice(0, 14);
+    if (!name || !this.player || name === this.player.stats.name) return;
+    try { localStorage.setItem('fba-player-name', name); } catch (e) { /* ignore */ }
+    this.state.unregister(this.player.stats.name);
+    this.player.stats.name = name;
+    this.player.name = name;
+    this.state.register(this.player.stats.name);
+    this.state.settings.playerName = name;
+    this.player.rig.setName(name);
   }
 }
