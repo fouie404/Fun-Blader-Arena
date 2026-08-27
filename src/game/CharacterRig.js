@@ -53,7 +53,13 @@ const GEO = {
   hairSide: new THREE.BoxGeometry(0.1, 0.4, 0.12),
   spearPole: new THREE.CylinderGeometry(0.03, 0.03, 1.7, 6),
   spearTip: new THREE.ConeGeometry(0.07, 0.3, 5),
-  skirt: new THREE.ConeGeometry(0.42, 0.5, 8)
+  skirt: new THREE.ConeGeometry(0.42, 0.5, 8),
+  iceCrown: new THREE.BoxGeometry(0.56, 0.12, 0.54),
+  iceShard: new THREE.ConeGeometry(0.07, 0.42, 5),
+  flame: new THREE.ConeGeometry(0.1, 0.55, 5),
+  bigFeather: new THREE.BoxGeometry(0.14, 0.95, 0.03),
+  rock: new THREE.BoxGeometry(0.5, 0.3, 0.3),
+  petal: new THREE.BoxGeometry(0.14, 0.26, 0.03)
 };
 
 function makeNameTexture(name, color) {
@@ -564,10 +570,19 @@ export class CharacterRig {
       const hood = add(GEO.hood, this.matPrimary, 0, 2.32, 0);
       hood.scale.set(1.05, 1.05, 1.05);
     } else if (key === 'frostwarden') {
-      add(GEO.crown, this.matAccent, 0, 2.2, 0);
-      add(GEO.orb, this.matGlow, -0.3, 2.2, 0.1).scale.setScalar(0.7);
-      add(GEO.orb, this.matGlow, 0.3, 2.2, 0.1).scale.setScalar(0.7);
-      const cape = add(GEO.cloak, this.matSecondary, 0, 1.2, -0.28);
+      add(GEO.greathelm, this.matSecondary, 0, 1.9, 0);
+      add(GEO.slit, this.matDark, 0, 1.94, 0.02);
+      const hl = add(GEO.iceShard, this.matAccent, -0.16, 2.2, 0.03);
+      hl.rotation.z = 0.55;
+      const hr = add(GEO.iceShard, this.matAccent, 0.16, 2.2, 0.03);
+      hr.rotation.z = -0.55;
+      const sL = add(GEO.iceShard, this.matAccent, -0.5, 1.6, -0.02);
+      sL.rotation.z = 0.4;
+      sL.scale.set(1.4, 1.6, 1.4);
+      const sR = add(GEO.iceShard, this.matAccent, 0.5, 1.6, -0.02);
+      sR.rotation.z = -0.4;
+      sR.scale.set(1.4, 1.6, 1.4);
+      const cape = add(GEO.cloak, this.matSecondary, 0, 1.16, -0.29);
       cape.scale.set(1.1, 1.05, 1);
     } else if (key === 'emberchampion') {
       for (let i = -1; i <= 1; i++) {
@@ -607,8 +622,14 @@ export class CharacterRig {
       wingR.rotation.y = -0.5;
       wingR.rotation.z = -0.45;
       for (let i = 0; i < 3; i++) {
-        add(GEO.spike, this.matGlow, (i - 1) * 0.12, 2.34 - Math.abs(i - 1) * 0.05, 0).scale.set(0.7, 1.3 - Math.abs(i - 1) * 0.25, 0.7);
+        add(GEO.bigFeather, this.matAccent, (i - 1) * 0.1, 1.9, -0.28 - i * 0.06).rotation.x = -0.6;
       }
+      const sun = new THREE.Mesh(GEO.halo, this.matGlow);
+      sun.position.y = 2.52;
+      sun.rotation.x = Math.PI / 2;
+      sun.scale.setScalar(1.15);
+      this.torsoPivot.add(sun);
+      this.decorExtra = sun;
       add(GEO.eye, this.matGlow, -0.09, 1.88, 0.27);
       add(GEO.eye, this.matGlow, 0.09, 1.88, 0.27);
     } else if (key === 'voidemperor') {
@@ -627,18 +648,20 @@ export class CharacterRig {
       this.orbitGroup.add(orb);
       g.add(this.orbitGroup);
     } else if (key === 'titanbreaker') {
-      const rockL = add(GEO.pauldron, this.matSecondary, -0.55, 1.62, 0);
+      const rockL = add(GEO.rock, this.matSecondary, -0.55, 1.6, 0);
       rockL.scale.set(1.8, 1.3, 1.4);
-      const rockR = add(GEO.pauldron, this.matSecondary, 0.55, 1.62, 0);
+      const rockR = add(GEO.rock, this.matSecondary, 0.55, 1.6, 0);
       rockR.scale.set(1.8, 1.3, 1.4);
-      const hornL = add(GEO.spike, this.matAccent, -0.2, 2.2, 0.05);
-      hornL.rotation.z = 0.55;
-      hornL.scale.set(1.2, 1.6, 1.2);
-      const hornR = add(GEO.spike, this.matAccent, 0.2, 2.2, 0.05);
-      hornR.rotation.z = -0.55;
-      hornR.scale.set(1.2, 1.6, 1.2);
+      const hornL = add(GEO.spike, this.matAccent, -0.22, 2.2, 0.05);
+      hornL.rotation.z = 0.6;
+      hornL.scale.set(1.1, 1.8, 1.1);
+      const hornR = add(GEO.spike, this.matAccent, 0.22, 2.2, 0.05);
+      hornR.rotation.z = -0.6;
+      hornR.scale.set(1.1, 1.8, 1.1);
       add(GEO.crossV, this.matGlow, 0, 1.2, 0.235);
       add(GEO.crossH, this.matGlow, 0, 1.3, 0.235);
+      const gem = add(GEO.orb, this.matAccent, 0, 1.46, 0.26);
+      gem.scale.setScalar(0.9);
     } else if (key === 'seraph') {
       const halo = new THREE.Mesh(GEO.halo, this.matGlow);
       halo.position.y = 2.56;
@@ -750,12 +773,14 @@ export class CharacterRig {
       rockL.scale.set(2.0, 1.5, 1.5);
       const rockR = add(GEO.pauldron, this.matSecondary, 0.58, 1.64, 0);
       rockR.scale.set(2.0, 1.5, 1.5);
+      const core = add(GEO.orb, this.matGlow, 0, 1.68, 0.2);
+      core.scale.setScalar(1.2);
       add(GEO.crossV, this.matGlow, 0, 1.18, 0.235);
       add(GEO.crossH, this.matGlow, 0, 1.3, 0.235);
       add(GEO.jagged, this.matGlow, -0.18, 1.05, 0.24).rotation.z = 0.5;
-      const hornL = add(GEO.spike, this.matSecondary, -0.22, 2.22, 0);
+      const hornL = add(GEO.spike, this.matAccent, -0.22, 2.22, 0);
       hornL.rotation.z = 0.7;
-      const hornR = add(GEO.spike, this.matSecondary, 0.22, 2.22, 0);
+      const hornR = add(GEO.spike, this.matAccent, 0.22, 2.22, 0);
       hornR.rotation.z = -0.7;
     } else if (key === 'archangel') {
       const halo = new THREE.Mesh(GEO.halo, this.matGlow);
@@ -838,15 +863,19 @@ export class CharacterRig {
       rose.scale.setScalar(0.7);
       add(GEO.cloak, this.matPrimary, 0, 1.22, -0.27).scale.set(0.75, 0.95, 1);
     } else if (key === 'emberlily') {
-      for (let i = 0; i < 3; i++) {
-        add(GEO.spike, this.matGlow, (i - 1) * 0.1, 2.3 - Math.abs(i - 1) * 0.06, -0.02).scale.set(0.6, 1.1 - Math.abs(i - 1) * 0.25, 0.6);
+      for (let i = 0; i < 5; i++) {
+        const a = (i / 5) * Math.PI * 2;
+        add(GEO.petal, this.matAccent, Math.sin(a) * 0.2, 2.22 + Math.sin(a) * 0.06, Math.cos(a) * 0.2).setRotationFromEuler(new THREE.Euler(Math.cos(a), a, Math.sin(a) * 0.3));
       }
       add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
       add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
       const rose = add(GEO.orb, this.matGlow, 0.18, 1.44, 0.24);
       rose.scale.setScalar(0.7);
     } else if (key === 'frostlily') {
-      add(GEO.crown, this.matAccent, 0, 2.2, 0);
+      add(GEO.iceCrown, this.matSecondary, 0, 2.14, 0);
+      add(GEO.iceShard, this.matAccent, -0.13, 2.32, 0.02).rotation.z = 0.4;
+      add(GEO.iceShard, this.matAccent, 0, 2.38, 0.02);
+      add(GEO.iceShard, this.matAccent, 0.13, 2.32, 0.02).rotation.z = -0.4;
       add(GEO.eye, this.matGlow, -0.08, 1.88, 0.27);
       add(GEO.eye, this.matGlow, 0.08, 1.88, 0.27);
       const rose = add(GEO.orb, this.matGlow, 0.18, 1.44, 0.24);

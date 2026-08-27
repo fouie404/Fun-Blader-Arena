@@ -149,5 +149,119 @@ export const THEMES = {
       roof: 0x5a4a34, pillar: 0xc8b088, cap: 0x6e6248, platform: 0xc8ac7c,
       rock: 0xa89a78, trunk: 0x6a4a2a, leafA: 0x4a7a3a, leafB: 0x5a8a44
     }
+  },
+  caverns: {
+    id: 'caverns',
+    name: 'Crystal Caverns',
+    desc: 'Bioluminescent spires deep underground',
+    layout: 'caverns',
+    sky: 0x0a0d1a, fogColor: 0x0e1224, fogNear: 42, fogFar: 170,
+    hemiSky: 0x2a3a6a, hemiGround: 0x0a0a18, hemiI: 0.7,
+    sunColor: 0x5ad8ff, sunI: 0.7, sunPos: [20, 50, -20],
+    ambColor: 0x16204a, ambI: 0.6,
+    grass: 0x141a2e, mountain: 0x0f1428, cloud: 0.08,
+    stars: true, moon: false,
+    torchColor: 0x4fd8ff, torchI: 34,
+    particles: { color: 0x7ae0ff, size: 0.2, vy: 0.5, drift: 0.35 },
+    t: {
+      floor: 0x2a3050, wall: 0x262c4a, merlon: 0x1c2240, tower: 0x2c3254,
+      roof: 0x161a34, pillar: 0x38406a, cap: 0x1c2240, platform: 0x323858,
+      rock: 0x283052, trunk: 0x1a1e38, leafA: 0x2a4a6a, leafB: 0x3a6a8a
+    }
+  },
+  neon: {
+    id: 'neon',
+    name: 'Neon Grid',
+    desc: 'Synthwave city of light and chrome',
+    layout: 'neon',
+    sky: 0x120A2E, fogColor: 0x1a1040, fogNear: 48, fogFar: 190,
+    hemiSky: 0x5a2a8a, hemiGround: 0x0a0618, hemiI: 0.65,
+    sunColor: 0xff4fc0, sunI: 0.9, sunPos: [40, 55, 20],
+    ambColor: 0x2a104a, ambI: 0.55,
+    grass: 0x1a0f32, mountain: 0x0c081c, cloud: 0.05,
+    stars: true, moon: true,
+    torchColor: 0xff5ac8, torchI: 38,
+    particles: { color: 0xff7ae0, size: 0.22, vy: 0.45, drift: 0.8 },
+    t: {
+      floor: 0x241a4a, wall: 0x281c52, merlon: 0x1c1440, tower: 0x2c2058,
+      roof: 0x180e34, pillar: 0x3a2a6a, cap: 0x1c1440, platform: 0x302458,
+      rock: 0x241a44, trunk: 0x1a122e, leafA: 0x3a2a6a, leafB: 0x5a2a8a
+    }
+  },
+  bog: {
+    id: 'bog',
+    name: 'Ghastly Bog',
+    desc: 'Murky swamps haunted by dead light',
+    layout: 'bog',
+    sky: 0x1a1c16, fogColor: 0x20281e, fogNear: 40, fogFar: 165,
+    hemiSky: 0x3a4a34, hemiGround: 0x0c0e0a, hemiI: 0.55,
+    sunColor: 0x8a9a6a, sunI: 0.6, sunPos: [-35, 40, 20],
+    ambColor: 0x1a2a1a, ambI: 0.5,
+    grass: 0x2a3424, mountain: 0x1c2418, cloud: 0.2,
+    stars: false, moon: false,
+    torchColor: 0xa8d86a, torchI: 26,
+    particles: { color: 0x9ac86a, size: 0.18, vy: 0.3, drift: 0.5 },
+    t: {
+      floor: 0x3c4a34, wall: 0x354028, merlon: 0x2c3620, tower: 0x3a4630,
+      roof: 0x222c18, pillar: 0x4a5840, cap: 0x2c3620, platform: 0x46543c,
+      rock: 0x384428, trunk: 0x2e3820, leafA: 0x3a5a34, leafB: 0x4a6a40
+    }
+  },
+  ruins: {
+    id: 'ruins',
+    name: 'Verdant Ruins',
+    desc: 'Jungle-choked temple of a lost empire',
+    layout: 'forest',
+    sky: 0x7a9a6a, fogColor: 0x88a878, fogNear: 55, fogFar: 200,
+    hemiSky: 0x9ab88a, hemiGround: 0x3a4a30, hemiI: 0.85,
+    sunColor: 0xe8d8a0, sunI: 1.2, sunPos: [25, 60, -30],
+    ambColor: 0x2a3a2a, ambI: 0.3,
+    grass: 0x4a7a3a, mountain: 0x4a6a52, cloud: 0.5,
+    stars: false, moon: false,
+    torchColor: 0xd8c86a, torchI: 30,
+    particles: { color: 0xd8e0a0, size: 0.14, vy: 0.25, drift: 0.5 },
+    t: {
+      floor: 0x8a9a6a, wall: 0x7a8a5a, merlon: 0x63724a, tower: 0x809060,
+      roof: 0x4a5a38, pillar: 0x94a46e, cap: 0x63724a, platform: 0x90a068,
+      rock: 0x7a8c5e, trunk: 0x4a3a28, leafA: 0x2e7a34, leafB: 0x3a8a42
+    }
+  },
+  observatory: {
+    id: 'observatory',
+    name: 'Astral Observatory',
+    desc: 'Marble platform beneath the night stars',
+    layout: 'temple',
+    sky: 0x0a1020, fogColor: 0x101a36, fogNear: 55, fogFar: 190,
+    hemiSky: 0x2a3a6a, hemiGround: 0x0a0c18, hemiI: 0.6,
+    sunColor: 0xb8c8ff, sunI: 0.75, sunPos: [-20, 70, -40],
+    ambColor: 0x1a2448, ambI: 0.6,
+    grass: 0x1a2036, mountain: 0x141a2e, cloud: 0.12,
+    stars: true, moon: true,
+    torchColor: 0x9fb8ff, torchI: 32,
+    particles: { color: 0xc8d8ff, size: 0.16, vy: 0.35, drift: 0.5 },
+    t: {
+      floor: 0x3a4a72, wall: 0x34406a, merlon: 0x2a3458, tower: 0x404c78,
+      roof: 0x1e2650, pillar: 0x4a5a86, cap: 0x2a3458, platform: 0x46547e,
+      rock: 0x364468, trunk: 0x241e3e, leafA: 0x2a3a5e, leafB: 0x3a4a6e
+    }
+  },
+  blizzard: {
+    id: 'blizzard',
+    name: 'Frozen Summit',
+    desc: 'An alpine ridge buried in a night blizzard',
+    layout: 'frost',
+    sky: 0x141a26, fogColor: 0x1e2634, fogNear: 45, fogFar: 180,
+    hemiSky: 0x4a5a78, hemiGround: 0x141a22, hemiI: 0.7,
+    sunColor: 0xa8c8ff, sunI: 1.0, sunPos: [-40, 55, 30],
+    ambColor: 0x2a3a50, ambI: 0.4,
+    grass: 0x9aa8c0, mountain: 0x6a7a94, cloud: 0.9,
+    stars: true, moon: true,
+    torchColor: 0xffd09a, torchI: 30,
+    particles: { color: 0xdfeaff, size: 0.2, vy: -1.6, drift: 1.3 },
+    t: {
+      floor: 0x9aaac4, wall: 0x8a9ab4, merlon: 0x7a8aa4, tower: 0x94a4c0,
+      roof: 0x5a6a88, pillar: 0xa4b4cc, cap: 0x7a8aa4, platform: 0xa0b0c8,
+      rock: 0x8494ac, trunk: 0x4a4a5a, leafA: 0x6a88a0, leafB: 0x7a98b0
+    }
   }
 };

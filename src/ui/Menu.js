@@ -2,7 +2,7 @@ import { SKINS } from '../game/Skins.js';
 import { THEMES } from '../world/Themes.js';
 
 export class Menu {
-  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onGetDiamonds, onSpendDiamonds, onSetName, onRandomName, onRedeem }) {
+  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onGetDiamonds, onSpendDiamonds, onSetName, onRandomName, onRedeem, onUnlockSkin, onLoginState, onAuth, onLogout, onListServers, onCreateServer, onJoinServer }) {
     this.onSettings = onSettings;
     this.onGetCoins = onGetCoins || (() => 0);
     this.onSpendCoins = onSpendCoins || (() => false);
@@ -11,6 +11,13 @@ export class Menu {
     this.onRedeem = onRedeem || (() => ({ ok: false, msg: '' }));
     this.onSetName = onSetName || (() => {});
     this.onRandomName = onRandomName || (() => 'player');
+    this.onUnlockSkin = onUnlockSkin || (() => {});
+    this.onLoginState = onLoginState || (() => ({ authed: false, online: false }));
+    this.onAuth = onAuth || (async () => ({ ok: false, err: 'auth unavailable' }));
+    this.onLogout = onLogout || (() => {});
+    this.onListServers = onListServers || (async () => []);
+    this.onCreateServer = onCreateServer || (async () => ({ ok: false, err: 'backend disabled' }));
+    this.onJoinServer = onJoinServer || (async () => ({ ok: false, err: 'backend disabled' }));
     this.currentPanel = 'home';
     this.adModal = null;
     this.buyModal = null;
@@ -39,15 +46,17 @@ export class Menu {
 
         <div class="menu-panel" id="panel-home">
           <div class="name-row">
-            <input type="text" id="player-name" maxlength="14" spellcheck="false" autocomplete="off" placeholder="PLAYER NAME" />
+            <input type="text" id="player-name" maxlength="16" spellcheck="false" autocomplete="off" placeholder="PLAYER NAME" />
             <button class="menu-btn tiny" id="btn-random-name">RANDOM</button>
           </div>
           <button class="menu-btn" id="btn-play">PLAY</button>
           <button class="menu-btn" id="btn-random">RANDOM SERVER</button>
           <button class="menu-btn" id="btn-skins">SKINS</button>
           <button class="menu-btn" id="btn-maps">MAPS</button>
+          <button class="menu-btn" id="btn-online" style="display:none">ONLINE SERVER</button>
           <button class="menu-btn" id="btn-settings">SETTINGS</button>
           <button class="menu-btn" id="btn-controls">CONTROLS</button>
+          <button class="menu-btn small" id="btn-account">LOGIN / ACCOUNT</button>
         </div>
 
         <div class="menu-panel" id="panel-skins" style="display:none">
@@ -114,6 +123,30 @@ export class Menu {
           <button class="menu-btn small" id="btn-back-2">BACK</button>
         </div>
 
+        <div class="menu-panel" id="panel-online" style="display:none">
+          <div class="panel-title small">ONLINE ARENA</div>
+          <div class="skin-hint" id="online-status">Online multiplayer — other logged-in players can join your room.</div>
+          <div class="setting-row">
+            <label>Room name</label>
+            <input type="text" id="srv-name" maxlength="24" placeholder="My Arena" autocomplete="off" />
+          </div>
+          <div class="srv-actions">
+            <button class="menu-btn small" id="btn-create-server">CREATE SERVER</button>
+            <button class="menu-btn small" id="btn-refresh-servers">REFRESH</button>
+          </div>
+          <div class="skin-scroll" style="max-height:52vh">
+            <div class="server-list" id="server-list"><div class="srv-status">Loading servers…</div></div>
+          </div>
+          <button class="menu-btn small" id="btn-back-5">BACK</button>
+        </div>
+
+        <div class="menu-panel" id="panel-account" style="display:none">
+          <div class="panel-title small">ACCOUNT</div>
+          <div class="ad-status" id="account-status">Checking backend…</div>
+          <div id="account-body"></div>
+          <button class="menu-btn small" id="btn-back-6">BACK</button>
+        </div>
+
         <div class="ad-banner">
           <span class="ad-label">ADVERTISEMENT</span>
           <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5757231614668469" data-ad-format="auto" data-full-width-responsive="true"></ins>
@@ -144,6 +177,19 @@ export class Menu {
     $('btn-maps').addEventListener('click', () => this.showPanel('maps'));
     $('btn-settings').addEventListener('click', () => this.showPanel('settings'));
     $('btn-controls').addEventListener('click', () => this.showPanel('controls'));
+    $('btn-account').addEventListener('click', () => {
+      this.renderAccount();
+      this.showPanel('account');
+    });
+    $('btn-online').addEventListener('click', () => {
+      if (!this._authed()) return;
+      this.showPanel('online');
+      this.refreshServerList();
+    });
+    $('btn-back-5').addEventListener('click', () => this.showPanel('home'));
+    $('btn-back-6').addEventListener('click', () => this.showPanel('home'));
+    $('btn-create-server').addEventListener('click', () => this.createServerFlow());
+    $('btn-refresh-servers').addEventListener('click', () => this.refreshServerList());
     $('btn-back-1').addEventListener('click', () => this.showPanel('home'));
     $('btn-back-2').addEventListener('click', () => this.showPanel('home'));
     $('btn-back-3').addEventListener('click', () => this.showPanel('home'));
@@ -319,6 +365,7 @@ export class Menu {
       u.push(id);
       try { localStorage.setItem('fba-unlocked-skins', JSON.stringify(u)); } catch (e) { /* ignore */ }
     }
+    this.onUnlockSkin(id);
     this.renderSkinGrid();
     this.refreshCoins();
   }
@@ -432,12 +479,15 @@ export class Menu {
     this.root.classList.toggle('skins-mode', which === 'skins');
     this.root.classList.toggle('maps-mode', which === 'maps');
     if (which !== 'skins') this.hideSkinAction();
+    this.refreshOnlineButton();
     const $ = (id) => this.root.querySelector(`#${id}`);
     $('panel-home').style.display = which === 'home' ? 'grid' : 'none';
     $('panel-skins').style.display = which === 'skins' ? 'block' : 'none';
     $('panel-maps').style.display = which === 'maps' ? 'block' : 'none';
     $('panel-settings').style.display = which === 'settings' ? 'block' : 'none';
     $('panel-controls').style.display = which === 'controls' ? 'block' : 'none';
+    $('panel-online').style.display = which === 'online' ? 'block' : 'none';
+    $('panel-account').style.display = which === 'account' ? 'block' : 'none';
     if (which === 'skins') {
       this.refreshCoins();
       this.renderSkinGrid();
@@ -445,6 +495,112 @@ export class Menu {
         btn.classList.toggle('sel', btn.dataset.cat === this.shopFilter);
       }
     }
+  }
+
+  refreshOnlineButton() {
+    const st = this.onLoginState();
+    const btn = this.root.querySelector('#btn-online');
+    const acc = this.root.querySelector('#btn-account');
+    if (btn) btn.style.display = st.authed ? '' : 'none';
+    if (acc) acc.textContent = st.authed ? `ACCOUNT (${st.username || 'you'})` : 'LOGIN / ACCOUNT';
+  }
+
+  _authed() {
+    if (!this.onLoginState().authed) {
+      this.renderAccount();
+      this.showPanel('account');
+      return false;
+    }
+    return true;
+  }
+
+  renderAccount() {
+    const body = this.root.querySelector('#account-body');
+    const status = this.root.querySelector('#account-status');
+    const st = this.onLoginState();
+    if (!body || !status) return;
+    status.style.color = st.online ? '#9dff7a' : '#ffb36a';
+    status.textContent = st.online
+      ? 'Backend connected — progress is saved to your account.'
+      : 'Backend offline — progress is kept on this device only. Online play is unavailable until the server returns.';
+
+    if (st.authed) {
+      body.innerHTML = `
+        <div class="account-info">
+          <div class="account-name">Logged in as <b>${st.username}</b></div>
+          <div class="account-note">Your coins, diamonds and unlocked skins sync to your account automatically.</div>
+          <button class="menu-btn small" id="btn-logout">LOG OUT</button>
+        </div>`;
+      const btn = body.querySelector('#btn-logout');
+      if (btn) btn.addEventListener('click', () => { this.onLogout(); this.refreshOnlineButton(); this.renderAccount(); });
+    } else {
+      body.innerHTML = `
+        <div class="auth-form">
+          <input type="text" id="auth-user" maxlength="16" placeholder="Username" autocomplete="off" />
+          <input type="password" id="auth-pass" placeholder="Password" autocomplete="off" />
+          <div class="srv-actions">
+            <button class="menu-btn small" id="auth-login">LOG IN</button>
+            <button class="menu-btn small" id="auth-register">REGISTER</button>
+          </div>
+        </div>`;
+      body.querySelector('#auth-login').addEventListener('click', () => this.doAuth('login', status));
+      body.querySelector('#auth-register').addEventListener('click', () => this.doAuth('register', status));
+      body.querySelector('#auth-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.doAuth('login', status); });
+    }
+  }
+
+  async doAuth(mode, status) {
+    const user = this.root.querySelector('#auth-user');
+    if (!user) { status.textContent = 'Backend unavailable offline.'; return; }
+    const pass = this.root.querySelector('#auth-pass');
+    status.textContent = mode === 'register' ? 'Registering…' : 'Logging in…';
+    const res = await this.onAuth(mode, user.value, pass ? pass.value : '');
+    status.style.color = res.ok ? '#9dff7a' : '#ff8a7a';
+    status.textContent = res.ok ? (mode === 'register' ? 'Account created & signed in!' : 'Signed in!') : (res.err || 'Backend unreachable.');
+    if (res.ok) { this.refreshOnlineButton(); this.renderAccount(); this.refreshCoins(); }
+  }
+
+  async refreshServerList() {
+    const list = this.root.querySelector('#server-list');
+    if (!list) return;
+    list.innerHTML = '<div class="srv-status">Loading servers…</div>';
+    let servers = [];
+    try { servers = await this.onListServers(); } catch { servers = []; }
+    if (!servers || !servers.length) {
+      list.innerHTML = '<div class="srv-status">No open servers. Create one to start playing online.</div>';
+      return;
+    }
+    list.innerHTML = servers.map((s) => `
+      <button class="server-row" data-id="${s.id}">
+        <span class="server-name">${s.name || 'Arena'}</span>
+        <span class="server-host">by ${s.hostName || s.hostId}</span>
+        <span class="server-meta">${s.map || 'citadel'} &middot; ${s.playerCount || 0}/${s.capacity} ${s.hasPassword ? '&middot; <b>LOCKED</b>' : ''}</span>
+      </button>`).join('');
+    for (const row of list.querySelectorAll('.server-row')) {
+      row.addEventListener('click', () => this.joinServerFlow(row.dataset.id));
+    }
+  }
+
+  createServerFlow() {
+    const input = this.root.querySelector('#srv-name');
+    const name = (input && input.value.trim()) || 'My Arena';
+    this.createServer(name);
+  }
+
+  async createServer(name) {
+    const status = this.root.querySelector('#online-status');
+    if (status) { status.textContent = 'Creating server…'; status.style.color = '#9dff7a'; }
+    const res = await this.onCreateServer(name, { map: 'citadel', capacity: 8, bots: 10 });
+    if (!res.ok && status) { status.textContent = res.err || 'Failed to create server.'; status.style.color = '#ff8a7a'; }
+    else if (!res.ok) { /* no status el */ }
+    else this.refreshServerList();
+  }
+
+  async joinServerFlow(id) {
+    const status = this.root.querySelector('#online-status');
+    if (status) { status.textContent = 'Joining…'; status.style.color = '#9dff7a'; }
+    const res = await this.onJoinServer(id, '');
+    if (!res.ok && status) { status.textContent = res.err || 'Could not join.'; status.style.color = '#ff8a7a'; }
   }
 
   refreshCoins() {
@@ -520,6 +676,7 @@ export class Menu {
     if (document.activeElement !== nameInput) nameInput.value = s.playerName || '';
     this.selectSkin(s.skin || 'knight');
     this.selectMap(s.map || 'citadel');
+    this.refreshOnlineButton();
   }
 
   showResults(rows) {

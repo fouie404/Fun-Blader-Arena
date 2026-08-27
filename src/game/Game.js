@@ -5,6 +5,9 @@ import { SpawnSystem } from './SpawnSystem.js';
 import { CombatSystem } from './CombatSystem.js';
 import { Player } from './Player.js';
 import { Enemy, fakeName } from './Enemy.js';
+import { RemotePlayer } from './RemotePlayer.js';
+import { BackendClient } from '../net/BackendClient.js';
+import { NetworkManager } from '../net/NetworkManager.js';
 import { SKINS } from './Skins.js';
 import { ThirdPersonCamera } from '../camera/ThirdPersonCamera.js';
 import { Environment } from '../world/Environment.js';
@@ -38,6 +41,15 @@ export class Game {
 
     this.state = new GameState();
     this.audio = new AudioManager();
+
+    this.backend = new BackendClient();
+    this.network = new NetworkManager(this, this.backend);
+    this.remotes = new Map();
+
+    // If a saved account token exists, refresh its profile (silently, offline-safe).
+    if (this.backend.authed) {
+      this.backend.refreshProfile().finally(() => this.applyAccountProfile(true));
+    }
 
     try {
       const un = JSON.parse(localStorage.getItem('fba-unlocked-skins') || '[]');
@@ -77,7 +89,26 @@ export class Game {
       onSpendDiamonds: (n) => this.spendDiamonds(n),
       onSetName: (n) => this.setPlayerName(n),
       onRandomName: () => fakeName(new Set()),
-      onRedeem: (code) => this.redeemCode(code)
+      onRedeem: (code) => this.redeemCode(code),
+      onUnlockSkin: (id) => { this.backend.addOwnedSkin(id); this.syncProfileToBackend(); },
+      onLoginState: () => ({ authed: this.backend.authed, username: this.backend.username, online: this.backend.online }),
+      onAuth: async (mode, username, password) => {
+        const res = mode === 'register' ? await this.backend.register(username, password) : await this.backend.login(username, password);
+        if (res.ok) this.applyAccountProfile(true);
+        return res;
+      },
+      onLogout: () => { this.leaveOnlineServer(); this.backend.logout(); },
+      onListServers: () => this.backend.listServers(),
+      onCreateServer: async (name, opts) => {
+        const r = await this.backend.createServer(name, opts);
+        if (r.ok) this.startOnline(r.server.id, r.server.map, r.server.bots);
+        return r;
+      },
+      onJoinServer: async (id, password) => {
+        const r = await this.backend.joinServer(id, password);
+        if (r.ok) this.startOnline(id, r.server.map, r.server.bots);
+        return r;
+      }
     });
     this.menu.applySettings(this.state.settings);
     this.cameraRig.sensitivity = this.state.settings.sensitivity;
@@ -166,6 +197,7 @@ export class Game {
     this.state.coins = (this.state.coins || 0) + n;
     try { localStorage.setItem('fba-coins', String(this.state.coins)); } catch (e) { /* ignore */ }
     this.hud.setCoins(this.state.coins);
+    this.queueProfileSync();
   }
 
   spendCoins(n) {
@@ -173,6 +205,7 @@ export class Game {
     this.state.coins -= n;
     try { localStorage.setItem('fba-coins', String(this.state.coins)); } catch (e) { /* ignore */ }
     this.hud.setCoins(this.state.coins);
+    this.queueProfileSync();
     return true;
   }
 
@@ -180,6 +213,7 @@ export class Game {
     this.state.diamonds = (this.state.diamonds || 0) + n;
     try { localStorage.setItem('fba-diamonds', String(this.state.diamonds)); } catch (e) { /* ignore */ }
     this.hud.setDiamonds(this.state.diamonds);
+    this.queueProfileSync();
   }
 
   spendDiamonds(n) {
@@ -187,6 +221,7 @@ export class Game {
     this.state.diamonds -= n;
     try { localStorage.setItem('fba-diamonds', String(this.state.diamonds)); } catch (e) { /* ignore */ }
     this.hud.setDiamonds(this.state.diamonds);
+    this.queueProfileSync();
     return true;
   }
 
@@ -222,6 +257,114 @@ export class Game {
     this.audio.ensure();
     this.audio.elimination();
     return { ok: true, msg: fn() };
+  }
+
+  applyAccountProfile(overlayLocal = true) {
+    const prof = this.backend.profile;
+    if (!prof) return;
+    if (typeof prof.coins === 'number') this.state.coins = Math.max(0, Math.round(prof.coins));
+    if (typeof prof.diamonds === 'number') this.state.diamonds = Math.max(0, Math.round(prof.diamonds));
+    if (Array.isArray(prof.skins)) {
+      const un = this.unlockedSkins();
+      let changed = false;
+      for (const s of prof.skins) if (!un.includes(s)) { un.push(s); changed = true; }
+      if (changed) { try { localStorage.setItem('fba-unlocked-skins', JSON.stringify(un)); } catch { /* ignore */ } }
+      if (overlayLocal) this.menu?.renderSkinGrid();
+    }
+    this.applyAccountIdentity();
+    this.hud?.setCoins(this.state.coins);
+    this.hud?.setDiamonds(this.state.diamonds);
+    this.menu?.refreshCoins();
+    this.menu?.refreshOnlineButton();
+    this.syncProfileToBackend();
+  }
+
+  // Make the arena character's name follow the logged-in username.
+  applyAccountIdentity() {
+    const uname = this.backend.username;
+    if (!uname) return;
+    const current = this.state.settings.playerName || '';
+    if (current === uname) return; // already matches
+    this.state.settings.playerName = uname;
+    try { localStorage.setItem('fba-player-name', uname); } catch { /* ignore */ }
+    if (this.player) this.setPlayerName(uname);
+    const nameInput = document.getElementById('player-name');
+    if (nameInput && document.activeElement !== nameInput) nameInput.value = uname;
+  }
+
+  unlockedSkins() {
+    try { return JSON.parse(localStorage.getItem('fba-unlocked-skins') || '[]'); } catch { return []; }
+  }
+
+  syncProfileToBackend() {
+    if (!this.backend.authed) return;
+    this.backend.pushProfile(this.state.coins, this.state.diamonds, this.unlockedSkins());
+  }
+
+  // Fire-and-forget persistence with a short throttle to avoid spamming the API.
+  queueProfileSync() {
+    if (!this.backend.authed) return;
+    const now = Date.now();
+    if (this._lastSync && now - this._lastSync < 2000) return;
+    this._lastSync = now;
+    this.syncProfileToBackend();
+  }
+
+  addRemotePlayer(peer) {
+    const id = peer && peer.id;
+    if (!id || this.remotes.has(id)) return;
+    const skinId = SKINS[peer.skin] ? peer.skin : 'knight';
+    const spawnPos = this.spawn.getSpawn([{ pos: this.player ? this.player.pos : new THREE.Vector3(), radius: 8 }]);
+    const stats = { name: peer.name || 'player', kills: 0, deaths: 0 };
+    const rp = new RemotePlayer(this, id, stats, spawnPos, skinId);
+    this.remotes.set(id, rp);
+    this.state.register(stats);
+    this.hud?.announce(`${stats.name} joined the server`);
+    // Bots fill empty slots — a real player replaces the weakest bot when room is full.
+    if (this.onlineRoomId && (this.enemies.length + this.remotes.size) > this.onlineBotCap) {
+      this.removeLowestBot();
+    }
+    if (this.onlineRoomId) this.state.targetBots = Math.max(0, Math.round(this.onlineBotCap - this.remotes.size));
+  }
+
+  removeRemotePlayer(id) {
+    const rp = this.remotes.get(id);
+    if (!rp) return;
+    this.remotes.delete(id);
+    this.combat.unregister(rp);
+    this.state.unregister(rp.stats.name);
+    this.scene.remove(rp.rig.root);
+    try { rp.rig.dispose(); } catch { /* ignore */ }
+    this.hud?.announce(`${rp.name || 'a player'} left the server`, 'left');
+    // Refill the freed slot with a bot.
+    if (this.onlineRoomId) this.state.targetBots = Math.max(0, this.onlineBotCap - this.remotes.size);
+    this.addBotWithAnnounce();
+  }
+
+  leaveOnlineServer() {
+    if (this.onlineRoomId) this.backend.leaveServer(this.onlineRoomId);
+    this.onlineRoomId = null;
+    this.network.dispose();
+    for (const id of [...this.remotes.keys()]) this.removeRemotePlayer(id);
+  }
+
+  startOnline(serverId, map, bots) {
+    this.leaveOnlineServer();
+    this.onlineRoomId = serverId;
+    this.onlineBotCap = (typeof bots === 'number' && bots > 0) ? Math.min(15, bots) : 10;
+    if (map && THEMES[map]) { this.state.settings.map = map; if (this.state.phase === 'menu') this.applyMap(map); }
+    this.network.connect(serverId, {
+      name: this.state.settings.playerName,
+      skin: this.state.settings.skin,
+      map: this.state.settings.map
+    });
+    this.hud?.announce('Connecting to online arena…');
+    if (this.state.phase === 'menu') {
+      this.startMatch('play');
+      // Enforce the server's bot-cap: bots fill any slots not occupied by real players.
+      this.state.targetBots = this.onlineBotCap;
+      while (this.enemies.length < this.onlineBotCap) this.addBotWithAnnounce();
+    }
   }
 
   spawnDiamond() {
@@ -382,6 +525,8 @@ export class Game {
 
   quitToMenu() {
     this.audio.uiClick();
+    this.leaveOnlineServer();
+    this.syncProfileToBackend(); // final persist of coins/diamonds/skins
     this.menu.showMain();
     this.state.phase = 'menu';
     this.hud.hideDeath();
@@ -658,6 +803,14 @@ export class Game {
     }
 
     for (const e of this.enemies) e.update(dt);
+    for (const r of this.remotes.values()) r.update(dt);
+    this.network.update(dt);
+    // Bridge own-player attacks to the network so peers animate them.
+    if (this.network.connectedNow && this.player) {
+      const key = this.player.attack ? this.player.attack.def.key : '';
+      if (key && key !== this._netAtk) { this.network.sendAttack(key); this._netAtk = key; }
+      if (!key) this._netAtk = '';
+    }
 
     this.emitAura(dt);
     this.updateDiamonds(dt);
@@ -682,7 +835,7 @@ export class Game {
       if (this._topT <= 0) {
         this._topT = 0.5;
         const byName = new Map();
-        for (const f of [this.player, ...this.enemies]) {
+        for (const f of [this.player, ...this.enemies, ...this.remotes.values()]) {
           if (f) byName.set(f.stats.name, f);
         }
         const top = this.state
@@ -842,7 +995,7 @@ export class Game {
   }
 
   setPlayerName(raw) {
-    const name = String(raw || '').trim().slice(0, 14);
+    const name = String(raw || '').trim().slice(0, 16);
     if (!name || !this.player || name === this.player.stats.name) return;
     try { localStorage.setItem('fba-player-name', name); } catch (e) { /* ignore */ }
     this.state.unregister(this.player.stats.name);
