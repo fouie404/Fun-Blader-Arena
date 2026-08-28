@@ -33,14 +33,18 @@ export class NetworkManager {
     else if (wasMe) this.game.onBotHostLost();
   }
 
-  connect(roomId, opts = {}) {
+  async connect(roomId, opts = {}) {
     this.roomId = roomId;
     this.name = opts.name || this.game.state.settings.playerName || 'player';
     this.skin = opts.skin || this.game.state.settings.skin || 'knight';
     this.map = opts.map || 'citadel';
     this.hostId = null;
     if (this.socket) { try { this.socket.close(); } catch { /* ignore */ } }
-    if (!this.backend || !this.backend.token) { this.connected = false; return; }
+    if (this.backend) {
+      // Anonymous guest session (no account) — required to open the websocket.
+      const ok = await this.backend.ensureSession(this.name);
+      if (!ok || !this.backend.token) { this.connected = false; return; }
+    }
     try {
       const base = this.backend.wsBase();
       const url = `${base}/ws?token=${encodeURIComponent(this.backend.token)}&server=${encodeURIComponent(roomId)}`;

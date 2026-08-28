@@ -735,51 +735,6 @@ kbd {
 .m-s { color: #c8ccd4; font-weight: 700; }
 .m-b { color: #cd8f4a; font-weight: 700; }
 
-.account-stats {
-  font-size: 13px;
-  letter-spacing: 1px;
-  color: #d9d2c0;
-  margin-bottom: 8px;
-}
-
-/* ---- split LOG IN / REGISTER sections ---- */
-.auth-cols {
-  display: flex;
-  gap: 14px;
-  align-items: stretch;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.auth-cols .auth-form {
-  flex: 1 1 170px;
-  max-width: 230px;
-}
-
-.auth-sep {
-  width: 1px;
-  background: rgba(201, 162, 39, 0.35);
-  align-self: stretch;
-}
-
-.auth-head {
-  font-size: 13.5px;
-  letter-spacing: 2.5px;
-  color: #ffd76a;
-  border-bottom: 1px solid rgba(201, 162, 39, 0.4);
-  padding-bottom: 6px;
-  margin-bottom: 10px;
-  text-align: center;
-}
-
-.auth-status {
-  min-height: 30px;
-  font-size: 12px;
-  line-height: 1.4;
-  text-align: center;
-  color: #b9ad93;
-}
-
 /* ---- play-again vote panel on the results screen ---- */
 .vote-box {
   margin-top: 14px;
@@ -1996,47 +1951,7 @@ body.touch .controls-hint {
   text-align: right;
 }
 
-/* account + auth */
-#panel-account .account-info,
-#panel-account .auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  width: 420px;
-  max-width: 86vw;
-  padding: 18px 20px;
-  background: linear-gradient(#1d1812, #14100c);
-  border: 1px solid rgba(201, 162, 39, 0.35);
-  border-radius: 12px;
-  margin: 10px auto 14px;
-}
-.account-name {
-  font-size: 16px;
-  letter-spacing: 1px;
-  color: #ffe9ad;
-}
-.account-name b {
-  color: #8fd8ff;
-}
-.account-note {
-  font-size: 12.5px;
-  color: #b9ad93;
-  line-height: 1.6;
-}
-.auth-form input {
-  width: 100%;
-  padding: 10px 12px;
-  box-sizing: border-box;
-  background: #0f0c08;
-  border: 1px solid rgba(201, 162, 39, 0.4);
-  border-radius: 8px;
-  color: #e8e2d5;
-  font: inherit;
-  outline: none;
-}
-.auth-form input:focus {
-  border-color: #d8a02a;
-}
+/* (accounts were removed — online play uses anonymous guest sessions) */
 
 /* error overlay */
 #err-overlay {

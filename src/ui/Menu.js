@@ -2,7 +2,7 @@ import { SKINS } from '../game/Skins.js';
 import { THEMES } from '../world/Themes.js';
 
 export class Menu {
-  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onGetDiamonds, onSpendDiamonds, onSetName, onRandomName, onRedeem, onUnlockSkin, onLoginState, onAuth, onLogout, onListServers, onCreateServer, onJoinServer, onGetStats }) {
+  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onGetDiamonds, onSpendDiamonds, onSetName, onRandomName, onRedeem, onUnlockSkin, onListServers, onCreateServer, onJoinServer, onGetStats }) {
     this.onSettings = onSettings;
     this.onGetCoins = onGetCoins || (() => 0);
     this.onSpendCoins = onSpendCoins || (() => false);
@@ -12,9 +12,6 @@ export class Menu {
     this.onSetName = onSetName || (() => {});
     this.onRandomName = onRandomName || (() => 'player');
     this.onUnlockSkin = onUnlockSkin || (() => {});
-    this.onLoginState = onLoginState || (() => ({ authed: false, online: false }));
-    this.onAuth = onAuth || (async () => ({ ok: false, err: 'auth unavailable' }));
-    this.onLogout = onLogout || (() => {});
     this.onListServers = onListServers || (async () => []);
     this.onCreateServer = onCreateServer || (async () => ({ ok: false, err: 'backend disabled' }));
     this.onJoinServer = onJoinServer || (async () => ({ ok: false, err: 'backend disabled' }));
@@ -57,10 +54,9 @@ export class Menu {
           <button class="menu-btn" id="btn-random">RANDOM SERVER</button>
           <button class="menu-btn" id="btn-skins">SKINS</button>
           <button class="menu-btn" id="btn-maps">MAPS</button>
-          <button class="menu-btn" id="btn-online" style="display:none">ONLINE SERVER</button>
+          <button class="menu-btn" id="btn-online">ONLINE SERVER</button>
           <button class="menu-btn" id="btn-settings">SETTINGS</button>
           <button class="menu-btn" id="btn-controls">CONTROLS</button>
-          <button class="menu-btn small" id="btn-account">LOGIN / ACCOUNT</button>
         </div>
 
         <div class="menu-panel" id="panel-skins" style="display:none">
@@ -144,13 +140,6 @@ export class Menu {
           <button class="menu-btn small" id="btn-back-5">BACK</button>
         </div>
 
-        <div class="menu-panel" id="panel-account" style="display:none">
-          <div class="panel-title small">ACCOUNT</div>
-          <div class="ad-status" id="account-status">Checking backend…</div>
-          <div id="account-body"></div>
-          <button class="menu-btn small" id="btn-back-6">BACK</button>
-        </div>
-
         <div class="ad-banner">
           <span class="ad-label">ADVERTISEMENT</span>
           <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5757231614668469" data-ad-format="auto" data-full-width-responsive="true"></ins>
@@ -181,17 +170,12 @@ export class Menu {
     $('btn-maps').addEventListener('click', () => this.showPanel('maps'));
     $('btn-settings').addEventListener('click', () => this.showPanel('settings'));
     $('btn-controls').addEventListener('click', () => this.showPanel('controls'));
-    $('btn-account').addEventListener('click', () => {
-      this.renderAccount();
-      this.showPanel('account');
-    });
     $('btn-online').addEventListener('click', () => {
-      if (!this._authed()) return;
+      // No account needed — online play works for everyone.
       this.showPanel('online');
       this.refreshServerList();
     });
     $('btn-back-5').addEventListener('click', () => this.showPanel('home'));
-    $('btn-back-6').addEventListener('click', () => this.showPanel('home'));
     $('btn-create-server').addEventListener('click', () => this.createServerFlow());
     $('btn-refresh-servers').addEventListener('click', () => this.refreshServerList());
     $('btn-back-1').addEventListener('click', () => this.showPanel('home'));
@@ -491,7 +475,6 @@ export class Menu {
     $('panel-settings').style.display = which === 'settings' ? 'block' : 'none';
     $('panel-controls').style.display = which === 'controls' ? 'block' : 'none';
     $('panel-online').style.display = which === 'online' ? 'block' : 'none';
-    $('panel-account').style.display = which === 'account' ? 'block' : 'none';
     if (which === 'skins') {
       this.refreshCoins();
       this.renderSkinGrid();
@@ -502,85 +485,9 @@ export class Menu {
   }
 
   refreshOnlineButton() {
-    const st = this.onLoginState();
+    // Online play needs no account — the button is always available.
     const btn = this.root.querySelector('#btn-online');
-    const acc = this.root.querySelector('#btn-account');
-    if (btn) btn.style.display = st.authed ? '' : 'none';
-    if (acc) acc.textContent = st.authed ? `ACCOUNT (${st.username || 'you'})` : 'LOGIN / ACCOUNT';
-  }
-
-  _authed() {
-    if (!this.onLoginState().authed) {
-      this.renderAccount();
-      this.showPanel('account');
-      return false;
-    }
-    return true;
-  }
-
-  renderAccount() {
-    const body = this.root.querySelector('#account-body');
-    const status = this.root.querySelector('#account-status');
-    const st = this.onLoginState();
-    if (!body || !status) return;
-    status.style.color = st.online ? '#9dff7a' : '#ffb36a';
-    status.textContent = st.online
-      ? 'Backend connected — progress is saved to your account.'
-      : 'Backend offline — progress is kept on this device only. Online play is unavailable until the server returns.';
-
-    if (st.authed) {
-      const stats = this.onGetStats();
-      body.innerHTML = `
-        <div class="account-info">
-          <div class="account-name">Logged in as <b>${st.username}</b></div>
-          <div class="account-stats">WINS: ${(stats.g || 0) + (stats.s || 0) + (stats.b || 0)}
-            &middot; <span class="m-g">GOLD ${stats.g || 0}</span>
-            &middot; <span class="m-s">SILVER ${stats.s || 0}</span>
-            &middot; <span class="m-b">BRONZE ${stats.b || 0}</span></div>
-          <div class="account-note">Your coins, diamonds, wins and unlocked skins sync to your account automatically — log in on any device to load them.</div>
-          <button class="menu-btn small" id="btn-logout">LOG OUT</button>
-        </div>`;
-      const btn = body.querySelector('#btn-logout');
-      if (btn) btn.addEventListener('click', () => { this.onLogout(); this.refreshOnlineButton(); this.renderAccount(); });
-    } else {
-      // Two clearly separated sections: LOG IN (left) and REGISTER (right).
-      body.innerHTML = `
-        <div class="auth-cols">
-          <div class="auth-form">
-            <div class="auth-head">LOG IN</div>
-            <input type="text" id="login-user" maxlength="16" placeholder="Username" autocomplete="off" />
-            <input type="password" id="login-pass" placeholder="Password" autocomplete="off" />
-            <button class="menu-btn small" id="auth-login">LOG IN</button>
-            <div class="auth-status" id="login-status"></div>
-          </div>
-          <div class="auth-sep"></div>
-          <div class="auth-form">
-            <div class="auth-head">REGISTER</div>
-            <input type="text" id="reg-user" maxlength="16" placeholder="Username (3&ndash;16 chars)" autocomplete="off" />
-            <input type="password" id="reg-pass" placeholder="Password (4+ chars)" autocomplete="off" />
-            <button class="menu-btn small" id="auth-register">CREATE ACCOUNT</button>
-            <div class="auth-status" id="reg-status"></div>
-          </div>
-        </div>`;
-      body.querySelector('#auth-login').addEventListener('click', () => this.doAuth('login', 'login-user', 'login-pass', 'login-status'));
-      body.querySelector('#auth-register').addEventListener('click', () => this.doAuth('register', 'reg-user', 'reg-pass', 'reg-status'));
-      body.querySelector('#login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.doAuth('login', 'login-user', 'login-pass', 'login-status'); });
-      body.querySelector('#reg-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.doAuth('register', 'reg-user', 'reg-pass', 'reg-status'); });
-    }
-  }
-
-  async doAuth(mode, userSel, passSel, statusSel) {
-    const status = this.root.querySelector(`#${statusSel}`) || this.root.querySelector('#account-status');
-    const user = this.root.querySelector(`#${userSel}`);
-    const pass = this.root.querySelector(`#${passSel}`);
-    if (!status) return;
-    if (!user || !pass) { status.textContent = 'Backend unavailable offline.'; return; }
-    status.style.color = '#e8e2d5';
-    status.textContent = mode === 'register' ? 'Creating account…' : 'Logging in…';
-    const res = await this.onAuth(mode, user.value, pass.value);
-    status.style.color = res.ok ? '#9dff7a' : '#ff8a7a';
-    status.textContent = res.ok ? (mode === 'register' ? 'Account created & signed in!' : 'Signed in!') : (res.err || 'Backend unreachable.');
-    if (res.ok) { this.refreshOnlineButton(); this.renderAccount(); this.refreshCoins(); }
+    if (btn) btn.style.display = '';
   }
 
   async refreshServerList() {

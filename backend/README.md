@@ -1,8 +1,11 @@
 # Fun Blader Arena — Backend
 
-Express + SQLite (`better-sqlite3`) + `ws` backend for accounts, profile sync, and online arena servers.
-It degrades gracefully: if the SQLite native module is missing it falls back to an in-memory store, and
-the frontend keeps running fully offline if every backend request fails.
+Express + SQLite (`better-sqlite3`) + `ws` backend for the online arena lobbies.
+**There are no accounts.** A player's name, coins, diamonds, skins and wins live only in the
+player's browser localStorage. The backend hands out an anonymous *guest session* token so the
+browser can create/join servers and open the websocket — unauthenticated progress is never stored
+server-side. It degrades gracefully: if the SQLite native module is missing it falls back to an
+in-memory store, and the frontend keeps running fully offline if every backend request fails.
 
 ## Run (local)
 ```bash
@@ -20,12 +23,9 @@ Env vars:
 - `FRONTEND_DIR`       — path to a built frontend to serve (default `../dist`)
 
 ## Endpoints
-- `GET  /api/health`                          — health check
-- `POST /api/auth/register` { username, password }   → token + profile
-- `POST /api/auth/login`    { username, password }   → token + profile
-- `GET  /api/me`                                (Bearer token)
-- `POST /api/me/push`  { coins?, diamonds?, skins? } (Bearer)
-- `POST /api/me/skin`  { skin }                  (Bearer)
+- `GET  /api/health`                            — health check
+- `POST /api/session`  { name? }                → anonymous guest token + profile (no accounts)
+- `GET  /api/session`                           (Bearer) validate/reuse the stored guest session
 - `GET  /api/servers`                            — open server list
 - `POST /api/servers`  { name, map?, capacity?, bots?, password? }   (Bearer, create)
   - `map` — any theme id (`citadel`, `moonlight`, `ember`, `frost`, `golden`, `temple`, `catacombs`, `cove`, `caverns`, `neon`)
@@ -44,9 +44,10 @@ the lowest-scoring bot gives up its slot ("…has left the server"); when a play
 refill the freed slot. On **public** servers, up to 5 secret PRO fighters join individually
 over time while a free slot remains. **Private** servers never get secret pros.
 
-### Accounts: extra stats
-Users additionally persist `winsG` / `winsS` / `winsB` (gold/silver/bronze — top-3 placements at
-match end), synced through `/api/me/push` and returned in every profile payload.
+### No accounts — progress stays local
+Name, coins, diamonds, unlocked skins (`winsG`/`winsS`/`winsB` placements) and redeemed codes are
+kept purely in each browser's localStorage (`fba-*` keys). The backend never stores or syncs them;
+guest session rows exist only so the websocket lobby can identify a connection.
 
 ### Play-again vote
 At match end the room host runs a 15 s play-again vote over the WS (`vote-open`, `vote` tally,

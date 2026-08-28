@@ -23,9 +23,6 @@ const store = openStore();
 function sha(payload) {
   return crypto.createHash('sha256').update(payload).digest('hex');
 }
-function hashPass(pw, salt) {
-  return sha(`${salt}::${pw}`);
-}
 function makeToken(user) {
   const body = `${user.id}.${Date.now()}`;
   const sig = sha(`${JWT_SECRET}::${body}`);
@@ -69,58 +66,25 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, db: store.ready() ? 'ok' : 'down', time: Date.now() });
 });
 
-/* ---------------- Auth ---------------- */
-app.post('/api/auth/register', (req, res) => {
-  const username = String(req.body?.username || '').trim();
-  const password = String(req.body?.password || '');
-  if (!/^[A-Za-z0-9_]{3,16}$/.test(username)) {
-    return res.status(400).json({ ok: false, err: 'Username must be 3-16 letters/numbers/underscore.' });
+/* ---------------- Sessions (NO accounts — anonymous guests) ---------------- */
+// Players have no accounts: progress (name, coins, diamonds, skins, wins) is
+// stored ONLY in the player's browser localStorage. The backend just issues an
+// anonymous session token used to create/join servers and open the websocket.
+app.post('/api/session', (req, res) => {
+  const wanted = String(req.body?.name || '').trim().replace(/[^A-Za-z0-9_]/g, '_').slice(0, 16) || 'blader';
+  let user = null;
+  let name = wanted;
+  for (let i = 0; i < 6 && !user; i++) {
+    const r = store.createUser({ username: name, passHash: 'guest' });
+    if (r.ok) user = r.user;
+    else name = wanted.slice(0, 12) + '-' + crypto.randomBytes(2).toString('hex');
   }
-  if (password.length < 4) {
-    return res.status(400).json({ ok: false, err: 'Password must be at least 4 characters.' });
-  }
-  const salt = crypto.randomBytes(8).toString('hex');
-  const r = store.createUser({ username, passHash: hashPass(password, salt) + '.' + salt });
-  if (!r.ok) return res.status(409).json({ ok: false, err: 'Username already taken.' });
-  const token = makeToken(r.user);
-  res.json({ ok: true, token, profile: publicUser(r.user) });
+  if (!user) return res.status(500).json({ ok: false, err: 'Could not create a session.' });
+  res.json({ ok: true, token: makeToken(user), profile: publicUser(user) });
 });
 
-app.post('/api/auth/login', (req, res) => {
-  const username = String(req.body?.username || '').trim();
-  const password = String(req.body?.password || '');
-  const u = store.findUser(username);
-  if (!u) return res.status(401).json({ ok: false, err: 'Invalid username or password.' });
-  const [hash, salt] = String(u.passHash).split('.');
-  if (hashPass(password, salt || '') !== hash) {
-    return res.status(401).json({ ok: false, err: 'Invalid username or password.' });
-  }
-  res.json({ ok: true, token: makeToken(u), profile: publicUser(u) });
-});
-
-app.get('/api/me', requireAuth, (req, res) => {
+app.get('/api/session', requireAuth, (req, res) => {
   res.json({ ok: true, profile: publicUser(req.user) });
-});
-
-/* ---------------- Profile sync ---------------- */
-app.post('/api/me/push', requireAuth, (req, res) => {
-  const patch = req.body || {};
-  const num = (v) => (typeof v === 'number' ? Math.max(0, Math.round(v)) : undefined);
-  const nxt = store.updateUser(req.user.id, {
-    coins: num(patch.coins),
-    diamonds: num(patch.diamonds),
-    skins: Array.isArray(patch.skins) ? patch.skins : undefined,
-    winsG: num(patch.winsG),
-    winsS: num(patch.winsS),
-    winsB: num(patch.winsB)
-  });
-  res.json({ ok: true, profile: publicUser(nxt) });
-});
-
-app.post('/api/me/skin', requireAuth, (req, res) => {
-  const user = store.addSkin(req.user.id, String(req.body?.skin || ''));
-  if (!user) return res.status(404).json({ ok: false, err: 'user missing' });
-  res.json({ ok: true, profile: publicUser(user) });
 });
 
 /* ---------------- Online servers (lobby) ---------------- */
@@ -205,7 +169,10 @@ wss.on('connection', (ws, req) => {
   if (!user) { ws.close(4001, 'unauthorized'); return; }
   if (!roomId) { ws.close(4002, 'no-server'); return; }
 
-  const myId = user.id;
+  // Room identity is PER CONNECTION, not per account: two tabs on one browser
+  // (or two players sharing a device) share the same stored session token, and
+  // must still see each other as two separate fighters in the arena.
+  const myId = `${user.id}.${crypto.randomBytes(3).toString('hex')}`;
   wsUser.set(ws, user);
   wsRoom.set(ws, roomId);
 
@@ -213,7 +180,7 @@ wss.on('connection', (ws, req) => {
   if (!room) { room = new Set(); rooms.set(roomId, room); }
   let meta = roomsMeta.get(roomId);
   if (!meta) { meta = new Map(); roomsMeta.set(roomId, meta); }
-  const myMeta = { id: myId, name: user.username, skin: 'knight', map: 'citadel' };
+  const myMeta = { id: myId, userId: user.id, name: user.username, skin: 'knight', map: 'citadel' };
   meta.set(ws, myMeta);
   room.add(ws);
 

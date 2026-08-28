@@ -1,6 +1,9 @@
 // BackendClient.js — resilient REST client for the optional Fun Blader backend.
-// NEVER blocks the game: every call is fire-and-forget with a timeout and caches to
-// localStorage. If the backend is down/absent the game keeps running fully offline.
+// NO ACCOUNTS: progress (name, coins, diamonds, skins, wins) lives ONLY in this
+// browser's localStorage. The backend is used purely for the online lobby — it
+// hands out an anonymous session token that lets a browser create/join servers
+// and open the websocket. Every call is fire-and-forget with a timeout; if the
+// backend is down/absent the game keeps running fully offline.
 const TOKEN_KEY = 'fba.token';
 const PROFILE_KEY = 'fba.profile';
 const URL_KEY = 'fba.api-url';
@@ -19,6 +22,8 @@ export class BackendClient {
     this.online = false;
     this._failCount = 0;
     this._lastHealth = 0;
+    this._ensuring = null;
+    try { this.displayName = localStorage.getItem('fba-player-name') || ''; } catch { this.displayName = ''; }
     this._readStore();
     // NOTE: online is NOT optimistically true from a stored token — it only becomes
     // true after a successful /api/health ping, so the UI never claims connectivity it lacks.
@@ -27,6 +32,10 @@ export class BackendClient {
   // Session getters — "authed" means we hold BOTH a token and a profile.
   get authed() { return !!(this.token && this.profile); }
   get username() { return (this.profile && this.profile.username) || null; }
+
+  setDisplayName(name) {
+    this.displayName = String(name || '').trim().slice(0, 16);
+  }
 
   _readStore() {
     try {
@@ -99,55 +108,55 @@ export class BackendClient {
     return this.online;
   }
 
-  async register(username, password) {
-    let r;
-    try { r = await this._req('POST', '/api/auth/register', { username, password }); }
-    catch { return { ok: false, err: 'Backend unreachable. Check that the backend server is running.' }; }
-    if (!r.ok) return { ok: false, err: r.err };
-    this._applySession(r.data.token, r.data.profile);
-    return { ok: true, profile: r.data.profile };
+  // ---- anonymous guest session (no accounts) ------------------------------
+  // Validates the stored token (if any) or acquires a fresh guest session.
+  // Never throws; concurrent calls share one in-flight request.
+  async ensureSession(name) {
+    if (name) this.setDisplayName(name);
+    if (this.authed) {
+      try {
+        const v = await this._req('GET', '/api/session');
+        if (v.ok) return true;
+      } catch { /* fall through to re-acquire below */ }
+      // Stale token (backend restarted / db wiped) — drop it and get a new one.
+      this.token = null;
+      this.profile = null;
+      this._save();
+    }
+    if (this._ensuring) return this._ensuring;
+    this._ensuring = this._createSession().finally(() => { this._ensuring = null; });
+    return this._ensuring;
   }
 
-  async login(username, password) {
-    let r;
-    try { r = await this._req('POST', '/api/auth/login', { username, password }); }
-    catch { return { ok: false, err: 'Backend unreachable. Check that the backend server is running.' }; }
-    if (!r.ok) return { ok: false, err: r.err };
-    this._applySession(r.data.token, r.data.profile);
-    return { ok: true, profile: r.data.profile };
+  async _createSession() {
+    try {
+      const r = await this._req('POST', '/api/session', { name: this.displayName });
+      if (r.ok && r.data && r.data.token) {
+        this._applySession(r.data.token, r.data.profile);
+        return true;
+      }
+    } catch { /* backend unreachable */ }
+    return false;
   }
 
   _applySession(token, profile) {
     this.token = token;
-    this.profile = profile;
+    this.profile = profile || null;
     this._save();
     this.online = true;
-    window.dispatchEvent(new CustomEvent('fba-login', { detail: { profile } }));
+    window.dispatchEvent(new CustomEvent('fba-session', { detail: { profile } }));
   }
 
-  logout() {
+  _dropSession() {
     this.token = null;
     this.profile = null;
     try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(PROFILE_KEY); } catch { /* ignore */ }
-    this.online = false;
-    window.dispatchEvent(new CustomEvent('fba-logout'));
   }
 
-  async refreshProfile() {
-    if (!this.authed) return false;
-    const r = await this._req('GET', '/api/me');
-    if (r.ok) { this.profile = r.data.profile; this._save(); }
-    return r.ok;
-  }
-
-  async pushProfile(coins, diamonds, skins, winsG, winsS, winsB) {
-    if (!this.authed) return;
-    try { await this._req('POST', '/api/me/push', { coins, diamonds, skins, winsG, winsS, winsB }); } catch { /* ignore */ }
-  }
-
-  async addOwnedSkin(skinId) {
-    if (!this.authed) return;
-    try { await this._req('POST', '/api/me/skin', { skin: skinId }); } catch { /* ignore */ }
+  // Re-acquire the session once if the backend rejected our token (401).
+  async _revalidate() {
+    this._dropSession();
+    return this.ensureSession();
   }
 
   async listServers() {
@@ -155,17 +164,25 @@ export class BackendClient {
   }
 
   async createServer(name, opts = {}) {
-    if (!this.authed) return { ok: false, err: 'Not logged in.' };
+    if (!(await this.ensureSession())) return { ok: false, err: 'Backend unreachable — online play needs the backend server running.' };
     try {
-      const r = await this._req('POST', '/api/servers', { name, ...opts });
+      let r = await this._req('POST', '/api/servers', { name, ...opts });
+      if (!r.ok && /401|unauthorized/i.test(r.err || '')) {
+        if (!(await this._revalidate())) return { ok: false, err: 'Backend unreachable.' };
+        r = await this._req('POST', '/api/servers', { name, ...opts });
+      }
       return r.ok ? { ok: true, server: r.data.server } : { ok: false, err: r.err };
     } catch { return { ok: false, err: 'Backend unreachable.' }; }
   }
 
   async joinServer(id, password) {
-    if (!this.authed) return { ok: false, err: 'Not logged in.' };
+    if (!(await this.ensureSession())) return { ok: false, err: 'Backend unreachable — online play needs the backend server running.' };
     try {
-      const r = await this._req('POST', `/api/servers/${id}/join`, { password });
+      let r = await this._req('POST', `/api/servers/${id}/join`, { password });
+      if (!r.ok && /401|unauthorized/i.test(r.err || '')) {
+        if (!(await this._revalidate())) return { ok: false, err: 'Backend unreachable.' };
+        r = await this._req('POST', `/api/servers/${id}/join`, { password });
+      }
       return r.ok ? { ok: true, server: r.data.server } : { ok: false, err: r.err };
     } catch { return { ok: false, err: 'Backend unreachable.' }; }
   }

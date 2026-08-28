@@ -63,10 +63,8 @@ export class Game {
     this._botStateT = 0;
     this._botSnapT = 0;
 
-    // If a saved account token exists, refresh its profile (silently, offline-safe).
-    if (this.backend.authed) {
-      this.backend.refreshProfile().finally(() => this.applyAccountProfile(true));
-    }
+    // No accounts: progress lives in localStorage, and online sessions are created
+    // lazily when the player creates/joins a server (anonymous guest session).
 
     try {
       const un = JSON.parse(localStorage.getItem('fba-unlocked-skins') || '[]');
@@ -108,23 +106,18 @@ export class Game {
       onSetName: (n) => this.setPlayerName(n),
       onRandomName: () => fakeName(new Set()),
       onRedeem: (code) => this.redeemCode(code),
-      onUnlockSkin: (id) => { this.backend.addOwnedSkin(id); this.syncProfileToBackend(); },
-      onLoginState: () => ({ authed: this.backend.authed, username: this.backend.username, online: this.backend.online }),
-      onAuth: async (mode, username, password) => {
-        const res = mode === 'register' ? await this.backend.register(username, password) : await this.backend.login(username, password);
-        if (res.ok) this.applyAccountProfile(true);
-        return res;
-      },
-      onLogout: () => { this.leaveOnlineServer(); this.backend.logout(); },
+      onUnlockSkin: (id) => { /* owned skins are stored in localStorage only (no accounts) */ },
       onListServers: () => this.backend.listServers(),
       onCreateServer: async (name, opts) => {
+        await this.backend.ensureSession(this.state.settings.playerName);
         const r = await this.backend.createServer(name, opts);
-        if (r.ok) this.startOnline(r.server.id, r.server.map, r.server.bots, r.server.capacity, r.server.hasPassword);
+        if (r.ok) await this.startOnline(r.server.id, r.server.map, r.server.bots, r.server.capacity, r.server.hasPassword);
         return r;
       },
       onJoinServer: async (id, password) => {
+        await this.backend.ensureSession(this.state.settings.playerName);
         const r = await this.backend.joinServer(id, password);
-        if (r.ok) this.startOnline(id, r.server.map, r.server.bots, r.server.capacity, r.server.hasPassword);
+        if (r.ok) await this.startOnline(id, r.server.map, r.server.bots, r.server.capacity, r.server.hasPassword);
         return r;
       }
     });
@@ -215,7 +208,7 @@ export class Game {
     this.state.coins = (this.state.coins || 0) + n;
     try { localStorage.setItem('fba-coins', String(this.state.coins)); } catch (e) { /* ignore */ }
     this.hud.setCoins(this.state.coins);
-    this.queueProfileSync();
+    this.menu?.refreshCoins();
   }
 
   spendCoins(n) {
@@ -223,7 +216,7 @@ export class Game {
     this.state.coins -= n;
     try { localStorage.setItem('fba-coins', String(this.state.coins)); } catch (e) { /* ignore */ }
     this.hud.setCoins(this.state.coins);
-    this.queueProfileSync();
+    this.menu?.refreshCoins();
     return true;
   }
 
@@ -231,7 +224,7 @@ export class Game {
     this.state.diamonds = (this.state.diamonds || 0) + n;
     try { localStorage.setItem('fba-diamonds', String(this.state.diamonds)); } catch (e) { /* ignore */ }
     this.hud.setDiamonds(this.state.diamonds);
-    this.queueProfileSync();
+    this.menu?.refreshCoins();
   }
 
   spendDiamonds(n) {
@@ -239,7 +232,7 @@ export class Game {
     this.state.diamonds -= n;
     try { localStorage.setItem('fba-diamonds', String(this.state.diamonds)); } catch (e) { /* ignore */ }
     this.hud.setDiamonds(this.state.diamonds);
-    this.queueProfileSync();
+    this.menu?.refreshCoins();
     return true;
   }
 
@@ -256,7 +249,6 @@ export class Game {
     else if (place === 3) this.state.winsB += 1;
     else return;
     this.saveWins();
-    this.queueProfileSync();
     this.menu?.refreshStats();
   }
 
@@ -296,59 +288,10 @@ export class Game {
     return { ok: true, msg: fn() };
   }
 
-  applyAccountProfile(overlayLocal = true) {
-    const prof = this.backend.profile;
-    if (!prof) return;
-    if (typeof prof.coins === 'number') this.state.coins = Math.max(0, Math.round(prof.coins));
-    if (typeof prof.diamonds === 'number') this.state.diamonds = Math.max(0, Math.round(prof.diamonds));
-    if (typeof prof.winsG === 'number') this.state.winsG = Math.max(0, Math.round(prof.winsG));
-    if (typeof prof.winsS === 'number') this.state.winsS = Math.max(0, Math.round(prof.winsS));
-    if (typeof prof.winsB === 'number') this.state.winsB = Math.max(0, Math.round(prof.winsB));
-    this.saveWins();
-    if (Array.isArray(prof.skins)) {
-      const un = this.unlockedSkins();
-      let changed = false;
-      for (const s of prof.skins) if (!un.includes(s)) { un.push(s); changed = true; }
-      if (changed) { try { localStorage.setItem('fba-unlocked-skins', JSON.stringify(un)); } catch { /* ignore */ } }
-      if (overlayLocal) this.menu?.renderSkinGrid();
-    }
-    this.applyAccountIdentity();
-    this.hud?.setCoins(this.state.coins);
-    this.hud?.setDiamonds(this.state.diamonds);
-    this.menu?.refreshCoins();
-    this.menu?.refreshOnlineButton();
-    this.syncProfileToBackend();
-  }
-
-  // Make the arena character's name follow the logged-in username.
-  applyAccountIdentity() {
-    const uname = this.backend.username;
-    if (!uname) return;
-    const current = this.state.settings.playerName || '';
-    if (current === uname) return; // already matches
-    this.state.settings.playerName = uname;
-    try { localStorage.setItem('fba-player-name', uname); } catch { /* ignore */ }
-    if (this.player) this.setPlayerName(uname);
-    const nameInput = document.getElementById('player-name');
-    if (nameInput && document.activeElement !== nameInput) nameInput.value = uname;
-  }
-
+  // Progress (coins, diamonds, skins, wins, name) is saved in localStorage only —
+  // there are no accounts. unlockedSkins() is the single source of truth for it.
   unlockedSkins() {
     try { return JSON.parse(localStorage.getItem('fba-unlocked-skins') || '[]'); } catch { return []; }
-  }
-
-  syncProfileToBackend() {
-    if (!this.backend.authed) return;
-    this.backend.pushProfile(this.state.coins, this.state.diamonds, this.unlockedSkins(), this.state.winsG, this.state.winsS, this.state.winsB);
-  }
-
-  // Fire-and-forget persistence with a short throttle to avoid spamming the API.
-  queueProfileSync() {
-    if (!this.backend.authed) return;
-    const now = Date.now();
-    if (this._lastSync && now - this._lastSync < 2000) return;
-    this._lastSync = now;
-    this.syncProfileToBackend();
   }
 
   addRemotePlayer(peer) {
@@ -432,6 +375,7 @@ export class Game {
     this.isBotHost = false;
     for (const b of this.enemies) {
       this.combat.unregister(b);
+      this.state.unregister(b.stats.name);
       this.scene.remove(b.rig.root);
       b.rig.dispose();
     }
@@ -543,6 +487,7 @@ export class Game {
     const victim = pool.reduce((a, b) => (b.stats.kills < a.stats.kills ? b : a));
     this.hud.announce(`${victim.stats.name} has left the server`, 'left');
     this.combat.unregister(victim);
+    this.state.unregister(victim.stats.name);
     this.scene.remove(victim.rig.root);
     victim.rig.dispose();
     const idx = this.enemies.indexOf(victim);
@@ -799,7 +744,7 @@ export class Game {
     this.state.targetBots = 0;
   }
 
-  startOnline(serverId, map, bots, capacity, hasPassword) {
+  async startOnline(serverId, map, bots, capacity, hasPassword) {
     this.leaveOnlineServer();
     this.onlineRoomId = serverId;
     this.serverBots = Math.max(0, Math.min(15, Math.round(Number(bots) || 0)));
@@ -808,7 +753,9 @@ export class Game {
     this.isBotHost = false;
     this.state.targetBots = 0; // set properly once we learn whether we are the host
     if (map && THEMES[map]) { this.state.settings.map = map; if (this.state.phase === 'menu') this.applyMap(map); }
-    this.network.connect(serverId, {
+    // Anonymous guest session — no account needed; the token lets us open the WS.
+    await this.backend.ensureSession(this.state.settings.playerName);
+    await this.network.connect(serverId, {
       name: this.state.settings.playerName,
       skin: this.state.settings.skin,
       map: this.state.settings.map
@@ -866,6 +813,7 @@ export class Game {
         this.combat.unregister(b);
         this.scene.remove(b.rig.root);
         b.rig.dispose();
+        this.state.unregister(b.stats.name);
       }
       this.enemies.length = 0;
       this.slots.used = 0;
@@ -973,6 +921,7 @@ export class Game {
     if (!victim) return;
     this.hud.announce(`${victim.stats.name} has left the server`, 'left');
     this.combat.unregister(victim);
+    this.state.unregister(victim.stats.name);
     this.scene.remove(victim.rig.root);
     victim.rig.dispose();
     const idx = this.enemies.indexOf(victim);
@@ -983,7 +932,6 @@ export class Game {
   quitToMenu() {
     this.audio.uiClick();
     this.leaveOnlineServer();
-    this.syncProfileToBackend(); // final persist of coins/diamonds/skins
     this.menu.showMain();
     this.state.phase = 'menu';
     this.hud.hideDeath();
@@ -1098,6 +1046,7 @@ export class Game {
   setBotCount(n) {
     for (const b of this.enemies) {
       this.combat.unregister(b);
+      this.state.unregister(b.stats.name);
       this.scene.remove(b.rig.root);
       b.rig.dispose();
     }
@@ -1228,7 +1177,6 @@ export class Game {
           onVoteYes: () => this.castMyVote(),
           onLeave: () => {
             try { this.leaveOnlineServer(); } catch (e) { /* ignore */ }
-            this.syncProfileToBackend();
             location.reload();
           }
         });
@@ -1456,6 +1404,7 @@ export class Game {
     const name = String(raw || '').trim().slice(0, 16);
     if (!name || !this.player || name === this.player.stats.name) return;
     try { localStorage.setItem('fba-player-name', name); } catch (e) { /* ignore */ }
+    this.backend.setDisplayName(name);
     this.state.unregister(this.player.stats.name);
     this.player.stats.name = name;
     this.player.name = name;
