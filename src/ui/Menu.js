@@ -2,7 +2,7 @@ import { SKINS } from '../game/Skins.js';
 import { THEMES } from '../world/Themes.js';
 
 export class Menu {
-  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onGetDiamonds, onSpendDiamonds, onSetName, onRandomName, onRedeem, onUnlockSkin, onLoginState, onAuth, onLogout, onListServers, onCreateServer, onJoinServer }) {
+  constructor({ onPlay, onStartRandom, onSettings, onGetCoins, onSpendCoins, onGetDiamonds, onSpendDiamonds, onSetName, onRandomName, onRedeem, onUnlockSkin, onLoginState, onAuth, onLogout, onListServers, onCreateServer, onJoinServer, onGetStats }) {
     this.onSettings = onSettings;
     this.onGetCoins = onGetCoins || (() => 0);
     this.onSpendCoins = onSpendCoins || (() => false);
@@ -18,6 +18,7 @@ export class Menu {
     this.onListServers = onListServers || (async () => []);
     this.onCreateServer = onCreateServer || (async () => ({ ok: false, err: 'backend disabled' }));
     this.onJoinServer = onJoinServer || (async () => ({ ok: false, err: 'backend disabled' }));
+    this.onGetStats = onGetStats || (() => ({ g: 0, s: 0, b: 0 }));
     this.currentPanel = 'home';
     this.adModal = null;
     this.buyModal = null;
@@ -43,6 +44,7 @@ export class Menu {
       <div class="menu-inner">
         <h1 class="game-title">FUN BLADER ARENA</h1>
         <div class="game-subtitle">Fight &middot; Fall &middot; Rise Again</div>
+        <div class="stats-chip" id="home-stats"></div>
 
         <div class="menu-panel" id="panel-home">
           <div class="name-row">
@@ -563,36 +565,55 @@ export class Menu {
       : 'Backend offline — progress is kept on this device only. Online play is unavailable until the server returns.';
 
     if (st.authed) {
+      const stats = this.onGetStats();
       body.innerHTML = `
         <div class="account-info">
           <div class="account-name">Logged in as <b>${st.username}</b></div>
-          <div class="account-note">Your coins, diamonds and unlocked skins sync to your account automatically.</div>
+          <div class="account-stats">WINS: ${(stats.g || 0) + (stats.s || 0) + (stats.b || 0)}
+            &middot; <span class="m-g">GOLD ${stats.g || 0}</span>
+            &middot; <span class="m-s">SILVER ${stats.s || 0}</span>
+            &middot; <span class="m-b">BRONZE ${stats.b || 0}</span></div>
+          <div class="account-note">Your coins, diamonds, wins and unlocked skins sync to your account automatically — log in on any device to load them.</div>
           <button class="menu-btn small" id="btn-logout">LOG OUT</button>
         </div>`;
       const btn = body.querySelector('#btn-logout');
       if (btn) btn.addEventListener('click', () => { this.onLogout(); this.refreshOnlineButton(); this.renderAccount(); });
     } else {
+      // Two clearly separated sections: LOG IN (left) and REGISTER (right).
       body.innerHTML = `
-        <div class="auth-form">
-          <input type="text" id="auth-user" maxlength="16" placeholder="Username" autocomplete="off" />
-          <input type="password" id="auth-pass" placeholder="Password" autocomplete="off" />
-          <div class="srv-actions">
+        <div class="auth-cols">
+          <div class="auth-form">
+            <div class="auth-head">LOG IN</div>
+            <input type="text" id="login-user" maxlength="16" placeholder="Username" autocomplete="off" />
+            <input type="password" id="login-pass" placeholder="Password" autocomplete="off" />
             <button class="menu-btn small" id="auth-login">LOG IN</button>
-            <button class="menu-btn small" id="auth-register">REGISTER</button>
+            <div class="auth-status" id="login-status"></div>
+          </div>
+          <div class="auth-sep"></div>
+          <div class="auth-form">
+            <div class="auth-head">REGISTER</div>
+            <input type="text" id="reg-user" maxlength="16" placeholder="Username (3&ndash;16 chars)" autocomplete="off" />
+            <input type="password" id="reg-pass" placeholder="Password (4+ chars)" autocomplete="off" />
+            <button class="menu-btn small" id="auth-register">CREATE ACCOUNT</button>
+            <div class="auth-status" id="reg-status"></div>
           </div>
         </div>`;
-      body.querySelector('#auth-login').addEventListener('click', () => this.doAuth('login', status));
-      body.querySelector('#auth-register').addEventListener('click', () => this.doAuth('register', status));
-      body.querySelector('#auth-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.doAuth('login', status); });
+      body.querySelector('#auth-login').addEventListener('click', () => this.doAuth('login', 'login-user', 'login-pass', 'login-status'));
+      body.querySelector('#auth-register').addEventListener('click', () => this.doAuth('register', 'reg-user', 'reg-pass', 'reg-status'));
+      body.querySelector('#login-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.doAuth('login', 'login-user', 'login-pass', 'login-status'); });
+      body.querySelector('#reg-pass').addEventListener('keydown', (e) => { if (e.key === 'Enter') this.doAuth('register', 'reg-user', 'reg-pass', 'reg-status'); });
     }
   }
 
-  async doAuth(mode, status) {
-    const user = this.root.querySelector('#auth-user');
-    if (!user) { status.textContent = 'Backend unavailable offline.'; return; }
-    const pass = this.root.querySelector('#auth-pass');
-    status.textContent = mode === 'register' ? 'Registering…' : 'Logging in…';
-    const res = await this.onAuth(mode, user.value, pass ? pass.value : '');
+  async doAuth(mode, userSel, passSel, statusSel) {
+    const status = this.root.querySelector(`#${statusSel}`) || this.root.querySelector('#account-status');
+    const user = this.root.querySelector(`#${userSel}`);
+    const pass = this.root.querySelector(`#${passSel}`);
+    if (!status) return;
+    if (!user || !pass) { status.textContent = 'Backend unavailable offline.'; return; }
+    status.style.color = '#e8e2d5';
+    status.textContent = mode === 'register' ? 'Creating account…' : 'Logging in…';
+    const res = await this.onAuth(mode, user.value, pass.value);
     status.style.color = res.ok ? '#9dff7a' : '#ff8a7a';
     status.textContent = res.ok ? (mode === 'register' ? 'Account created & signed in!' : 'Signed in!') : (res.err || 'Backend unreachable.');
     if (res.ok) { this.refreshOnlineButton(); this.renderAccount(); this.refreshCoins(); }
@@ -644,6 +665,20 @@ export class Menu {
     if (!res.ok && status) { status.textContent = res.err || 'Could not join.'; status.style.color = '#ff8a7a'; }
   }
 
+  refreshStats() {
+    const el = this.root.querySelector('#home-stats');
+    if (!el) return;
+    const st = this.onGetStats();
+    const total = (st.g || 0) + (st.s || 0) + (st.b || 0);
+    el.innerHTML =
+      `<b>WINS:</b> ${total}` +
+      ` <span class="m-g">GOLD ${st.g || 0}</span>` +
+      ` <span class="m-s">SILVER ${st.s || 0}</span>` +
+      ` <span class="m-b">BRONZE ${st.b || 0}</span>` +
+      ` &nbsp;&bull;&nbsp; <b>COINS:</b> ${Number(this.onGetCoins() || 0).toLocaleString()}` +
+      ` &nbsp;&bull;&nbsp; <b>DIAMONDS:</b> ${Number(this.onGetDiamonds() || 0).toLocaleString()}`;
+  }
+
   refreshCoins() {
     const chip = this.root.querySelector('#coins-chip');
     if (chip) {
@@ -651,6 +686,7 @@ export class Menu {
       const dias = Number(this.onGetDiamonds() || 0).toLocaleString();
       chip.textContent = `COINS: ${coins}  \u25c6 ${dias}`;
     }
+    this.refreshStats();
   }
 
   showBuyModal(skinId) {
@@ -720,7 +756,7 @@ export class Menu {
     this.refreshOnlineButton();
   }
 
-  showResults(rows) {
+  showResults(rows, opts = {}) {
     if (this.resultsEl) return;
     const medals = ['#ffd700', '#c8ccd4', '#cd8f4a'];
     const places = [
@@ -748,13 +784,49 @@ export class Menu {
             })
             .join('')}
         </div>
-        <button class="menu-btn" id="btn-start-over">BACK TO MENU</button>
+        <div class="vote-box" id="vote-box" style="display:none">
+          <div class="vote-title">PLAY AGAIN?</div>
+          <div class="vote-tally" id="vote-tally">0 / 0 agree</div>
+          <div class="vote-timer" id="vote-timer"></div>
+          <div class="srv-actions">
+            <button class="menu-btn" id="btn-vote-yes">PLAY AGAIN</button>
+            <button class="menu-btn small" id="btn-vote-leave">LEAVE</button>
+          </div>
+        </div>
+        <div class="res-note" id="res-note"></div>
       </div>`;
     document.body.appendChild(ov);
     this.resultsEl = ov;
-    ov.querySelector('#btn-start-over').addEventListener('click', () => {
-      location.reload();
-    });
+    ov.querySelector('#btn-vote-yes').addEventListener('click', () => { if (opts.onVoteYes) opts.onVoteYes(); });
+    ov.querySelector('#btn-vote-leave').addEventListener('click', () => { if (opts.onLeave) opts.onLeave(); });
+    this._lastVoteRender = '';
+  }
+
+  showVotePanel() {
+    if (!this.resultsEl) return;
+    const box = this.resultsEl.querySelector('#vote-box');
+    if (box) box.style.display = 'block';
+  }
+
+  updateVotePanel({ yes, total, left, voted }) {
+    if (!this.resultsEl) return;
+    const key = `${yes}|${total}|${left}|${voted ? 1 : 0}`;
+    if (key === this._lastVoteRender) return;
+    this._lastVoteRender = key;
+    const tally = this.resultsEl.querySelector('#vote-tally');
+    const timer = this.resultsEl.querySelector('#vote-timer');
+    const btn = this.resultsEl.querySelector('#btn-vote-yes');
+    const note = this.resultsEl.querySelector('#res-note');
+    if (tally) tally.textContent = `${yes} / ${total} agree`;
+    if (timer) timer.textContent = left > 0 ? `next round starts in ${left}s` : 'starting…';
+    if (btn) {
+      btn.textContent = voted ? 'VOTED \u2713' : 'PLAY AGAIN';
+      btn.disabled = !!voted;
+      btn.style.opacity = voted ? '0.55' : '1';
+    }
+    if (note) note.textContent = voted
+      ? 'You agreed — you will stay for the rematch.'
+      : 'Agree to stay. When time runs out, everyone who did not agree is kicked.';
   }
 
   hideResults() {

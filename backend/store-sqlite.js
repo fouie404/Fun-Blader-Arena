@@ -21,7 +21,10 @@ export function createStore(dbFile) {
       passHash TEXT NOT NULL,
       coins INTEGER NOT NULL DEFAULT 500,
       diamonds INTEGER NOT NULL DEFAULT 0,
-      skins TEXT NOT NULL DEFAULT '[]'
+      skins TEXT NOT NULL DEFAULT '[]',
+      winsG INTEGER NOT NULL DEFAULT 0,
+      winsS INTEGER NOT NULL DEFAULT 0,
+      winsB INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS servers (
       id TEXT PRIMARY KEY,
@@ -32,25 +35,33 @@ export function createStore(dbFile) {
       capacity INTEGER NOT NULL DEFAULT 8,
       bots INTEGER NOT NULL DEFAULT 10,
       players TEXT NOT NULL DEFAULT '[]',
-      created INTEGER NOT NULL
+      created INTEGER NOT NULL,
+      isFree INTEGER NOT NULL DEFAULT 0
     );
   `);
+  // Migrations for databases created before wins/isFree existed.
+  for (const stmt of [
+    'ALTER TABLE users ADD COLUMN winsG INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN winsS INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE users ADD COLUMN winsB INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE servers ADD COLUMN isFree INTEGER NOT NULL DEFAULT 0'
+  ]) { try { db.exec(stmt); } catch { /* column already exists */ } }
 
-  const IU = db.prepare('INSERT INTO users (id, username, passHash, coins, diamonds, skins) VALUES (@id, @username, @passHash, @coins, @diamonds, @skins)');
-  const UU = db.prepare('UPDATE users SET coins=@coins, diamonds=@diamonds, skins=@skins WHERE id=@id');
+  const IU = db.prepare('INSERT INTO users (id, username, passHash, coins, diamonds, skins, winsG, winsS, winsB) VALUES (@id, @username, @passHash, @coins, @diamonds, @skins, @winsG, @winsS, @winsB)');
+  const UU = db.prepare('UPDATE users SET coins=@coins, diamonds=@diamonds, skins=@skins, winsG=@winsG, winsS=@winsS, winsB=@winsB WHERE id=@id');
   const GU = db.prepare('SELECT * FROM users WHERE username=?');
   const GUB = db.prepare('SELECT * FROM users WHERE id=?');
   const RU = db.prepare('SELECT * FROM users');
 
-  const IS = db.prepare('INSERT INTO servers (id, name, hostId, password, map, capacity, bots, players, created) VALUES (@id, @name, @hostId, @password, @map, @capacity, @bots, @players, @created)');
+  const IS = db.prepare('INSERT INTO servers (id, name, hostId, password, map, capacity, bots, players, created, isFree) VALUES (@id, @name, @hostId, @password, @map, @capacity, @bots, @players, @created, @isFree)');
   const US = db.prepare('UPDATE servers SET players=@players WHERE id=@id');
   const GS = db.prepare('SELECT * FROM servers WHERE id=?');
   const RS = db.prepare('SELECT * FROM servers');
-  const RSJ = db.prepare('SELECT s.id, s.name, s.hostId, s.password, s.map, s.capacity, s.bots, s.players, s.created, u.username AS hostName FROM servers s LEFT JOIN users u ON u.id = s.hostId');
+  const RSJ = db.prepare('SELECT s.id, s.name, s.hostId, s.password, s.map, s.capacity, s.bots, s.players, s.created, s.isFree, u.username AS hostName FROM servers s LEFT JOIN users u ON u.id = s.hostId');
   const DS = db.prepare('DELETE FROM servers WHERE id=?');
 
-  const toUser = (r) => (r ? { id: r.id, username: r.username, passHash: r.passHash, coins: r.coins, diamonds: r.diamonds, skins: JSON.parse(r.skins) } : null);
-  const toServer = (r) => (r ? { id: r.id, name: r.name, hostId: r.hostId, hostName: r.hostName || null, password: r.password, map: r.map, capacity: r.capacity, bots: r.bots, players: JSON.parse(r.players), created: r.created } : null);
+  const toUser = (r) => (r ? { id: r.id, username: r.username, passHash: r.passHash, coins: r.coins, diamonds: r.diamonds, skins: JSON.parse(r.skins), winsG: r.winsG || 0, winsS: r.winsS || 0, winsB: r.winsB || 0 } : null);
+  const toServer = (r) => (r ? { id: r.id, name: r.name, hostId: r.hostId, hostName: r.hostName || null, password: r.password, map: r.map, capacity: r.capacity, bots: r.bots, players: JSON.parse(r.players), created: r.created, isFree: !!r.isFree } : null);
 
   let seq = 1;
   // Seed the sequence from persisted rows so a backend restart never regenerates
@@ -68,7 +79,7 @@ export function createStore(dbFile) {
     createUser({ username, passHash }) {
       if (GU.get(username)) return { ok: false, err: 'taken' };
       const id = 'u' + seq++;
-      IU.run({ id, username, passHash, coins: 500, diamonds: 0, skins: '[]' });
+      IU.run({ id, username, passHash, coins: 500, diamonds: 0, skins: '[]', winsG: 0, winsS: 0, winsB: 0 });
       return { ok: true, user: toUser(GU.get(username)) };
     },
 
@@ -88,8 +99,11 @@ export function createStore(dbFile) {
       if (!u) return null;
       if (typeof patch.coins === 'number') u.coins = Math.max(0, Math.round(patch.coins));
       if (typeof patch.diamonds === 'number') u.diamonds = Math.max(0, Math.round(patch.diamonds));
+      if (typeof patch.winsG === 'number') u.winsG = Math.max(0, Math.round(patch.winsG));
+      if (typeof patch.winsS === 'number') u.winsS = Math.max(0, Math.round(patch.winsS));
+      if (typeof patch.winsB === 'number') u.winsB = Math.max(0, Math.round(patch.winsB));
       if (Array.isArray(patch.skins)) u.skins = [...new Set(patch.skins.map(String))];
-      UU.run({ id, coins: u.coins, diamonds: u.diamonds, skins: JSON.stringify(u.skins) });
+      UU.run({ id, coins: u.coins, diamonds: u.diamonds, skins: JSON.stringify(u.skins), winsG: u.winsG || 0, winsS: u.winsS || 0, winsB: u.winsB || 0 });
       return u;
     },
 
@@ -103,8 +117,30 @@ export function createStore(dbFile) {
 
     roster() {
       return RU.all().map((r) => toUser(r)).map((u) => ({
-        id: u.id, username: u.username, coins: u.coins, diamonds: u.diamonds, skins: u.skins
+        id: u.id, username: u.username, coins: u.coins, diamonds: u.diamonds, skins: u.skins,
+        winsG: u.winsG || 0, winsS: u.winsS || 0, winsB: u.winsB || 0
       }));
+    },
+
+    // 4 permanent free servers that look player-made. Never "full": joining
+    // always succeeds and the hosting client drops bots to make room.
+    ensureFreeServers() {
+      const FREE = [
+        { id: 'free-1', hostId: 'sys-host-1', hostName: 'DarkSlayer_PH', name: '1v1 ME BRO' },
+        { id: 'free-2', hostId: 'sys-host-2', hostName: 'xXKingBladeXx', name: 'PROS ONLY' },
+        { id: 'free-3', hostId: 'sys-host-3', hostName: 'luckygamer09', name: 'Chill Arena' },
+        { id: 'free-4', hostId: 'sys-host-4', hostName: 'SilentReaper7', name: 'COIN FARM' }
+      ];
+      const MAPS = ['citadel', 'moonlight', 'ember', 'frost', 'golden', 'temple', 'catacombs', 'cove', 'caverns', 'neon'];
+      const IUS = db.prepare('INSERT OR IGNORE INTO users (id, username, passHash, coins, diamonds, skins, winsG, winsS, winsB) VALUES (?, ?, ?, 0, 0, ?, 0, 0, 0)');
+      const ISS = db.prepare('INSERT OR IGNORE INTO servers (id, name, hostId, password, map, capacity, bots, players, created, isFree) VALUES (?, ?, ?, NULL, ?, 12, ?, ?, ?, 1)');
+      FREE.forEach((f, i) => {
+        IUS.run(f.hostId, f.hostName, 'x.y', '[]');
+        const exists = GS.get(f.id);
+        if (!exists) {
+          ISS.run(f.id, f.name, f.hostId, MAPS[(i * 3 + 1) % MAPS.length], 6 + Math.floor(Math.random() * 5), JSON.stringify([f.hostId]), Date.now());
+        }
+      });
     },
 
     createServer(hostId, name, opts = {}) {
@@ -114,7 +150,7 @@ export function createStore(dbFile) {
         password: opts.password || null, map: opts.map || 'citadel',
         capacity: Math.min(15, Math.max(2, opts.capacity == null ? 8 : (Number(opts.capacity) || 2))),
         bots: Math.max(0, Math.min(4, opts.bots == null ? 2 : Math.round(Number(opts.bots) || 0))),
-        players: [hostId], created: Date.now()
+        players: [hostId], created: Date.now(), isFree: opts.isFree ? 1 : 0
       };
       IS.run({ ...rec, players: JSON.stringify(rec.players) });
       return rec;
@@ -126,22 +162,22 @@ export function createStore(dbFile) {
 
     listServers() {
       return RSJ.all().map(toServer)
-        .filter((s) => s && s.players.length < s.capacity)
+        .filter((s) => s && (s.isFree || s.players.length < s.capacity))
         .map((s) => ({
           id: s.id, name: s.name, hostId: s.hostId,
           hostName: s.hostName || s.hostId,
           map: s.map, capacity: s.capacity, playerCount: s.players.length,
-          bots: s.bots, hasPassword: !!s.password, created: s.created
+          bots: s.bots, hasPassword: !!s.password, created: s.created, isFree: !!s.isFree
         }))
-        .sort((a, b) => b.created - a.created);
+        .sort((a, b) => (b.isFree ? 1 : 0) - (a.isFree ? 1 : 0) || b.created - a.created);
     },
 
     joinServer(id, userId, password) {
       const s = toServer(GS.get(id));
       if (!s) return { ok: false, err: 'notfound' };
       if (s.players.includes(userId)) return { ok: true, server: s };
-      if (s.players.length >= s.capacity) return { ok: false, err: 'full' };
       if (s.password && s.password !== password) return { ok: false, err: 'pass' };
+      if (!s.isFree && s.players.length >= s.capacity) return { ok: false, err: 'full' };
       s.players.push(userId);
       US.run({ id, players: JSON.stringify(s.players) });
       return { ok: true, server: s };

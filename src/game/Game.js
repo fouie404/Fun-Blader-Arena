@@ -53,6 +53,10 @@ export class Game {
     this.netBots = new Map();
     this.isBotHost = false;
     this.serverBots = 2;      // regular bots configured by the server creator (0-4)
+    this.serverFree = false;  // free servers: pre-populated AI, never full
+    this.serverCapacity = 12;
+    this.vote = null;         // play-again vote state
+    this._voteUiT = 0;
     this._botPrefix = '';
     this._botNetId = 0;
     this._proJoinT = 0;
@@ -100,6 +104,7 @@ export class Game {
       onSpendCoins: (n) => this.spendCoins(n),
       onGetDiamonds: () => this.state.diamonds,
       onSpendDiamonds: (n) => this.spendDiamonds(n),
+      onGetStats: () => ({ g: this.state.winsG, s: this.state.winsS, b: this.state.winsB }),
       onSetName: (n) => this.setPlayerName(n),
       onRandomName: () => fakeName(new Set()),
       onRedeem: (code) => this.redeemCode(code),
@@ -114,12 +119,12 @@ export class Game {
       onListServers: () => this.backend.listServers(),
       onCreateServer: async (name, opts) => {
         const r = await this.backend.createServer(name, opts);
-        if (r.ok) this.startOnline(r.server.id, r.server.map, r.server.bots);
+        if (r.ok) this.startOnline(r.server.id, r.server.map, r.server.bots, r.server.free, r.server.capacity);
         return r;
       },
       onJoinServer: async (id, password) => {
         const r = await this.backend.joinServer(id, password);
-        if (r.ok) this.startOnline(id, r.server.map, r.server.bots);
+        if (r.ok) this.startOnline(r.server.id, r.server.map, r.server.bots, r.server.free, r.server.capacity);
         return r;
       }
     });
@@ -238,6 +243,25 @@ export class Game {
     return true;
   }
 
+  saveWins() {
+    try {
+      localStorage.setItem('fba-wins', JSON.stringify({ g: this.state.winsG, s: this.state.winsS, b: this.state.winsB }));
+    } catch (e) { /* ignore */ }
+  }
+
+  // Gold = #1, Silver = #2, Bronze = #3 at match end (top 3 of the scoreboard).
+  addMedal(place) {
+    if (place === 1) this.state.winsG += 1;
+    else if (place === 2) this.state.winsS += 1;
+    else if (place === 3) this.state.winsB += 1;
+    else return;
+    this.saveWins();
+    this.queueProfileSync();
+    this.menu?.refreshStats();
+  }
+
+  get totalWins() { return (this.state.winsG || 0) + (this.state.winsS || 0) + (this.state.winsB || 0); }
+
   redeemCode(raw) {
     const code = String(raw || '').trim().toLowerCase();
     if (!code) return { ok: false, msg: 'Enter a code first.' };
@@ -277,6 +301,10 @@ export class Game {
     if (!prof) return;
     if (typeof prof.coins === 'number') this.state.coins = Math.max(0, Math.round(prof.coins));
     if (typeof prof.diamonds === 'number') this.state.diamonds = Math.max(0, Math.round(prof.diamonds));
+    if (typeof prof.winsG === 'number') this.state.winsG = Math.max(0, Math.round(prof.winsG));
+    if (typeof prof.winsS === 'number') this.state.winsS = Math.max(0, Math.round(prof.winsS));
+    if (typeof prof.winsB === 'number') this.state.winsB = Math.max(0, Math.round(prof.winsB));
+    this.saveWins();
     if (Array.isArray(prof.skins)) {
       const un = this.unlockedSkins();
       let changed = false;
@@ -311,7 +339,7 @@ export class Game {
 
   syncProfileToBackend() {
     if (!this.backend.authed) return;
-    this.backend.pushProfile(this.state.coins, this.state.diamonds, this.unlockedSkins());
+    this.backend.pushProfile(this.state.coins, this.state.diamonds, this.unlockedSkins(), this.state.winsG, this.state.winsS, this.state.winsB);
   }
 
   // Fire-and-forget persistence with a short throttle to avoid spamming the API.
@@ -375,16 +403,20 @@ export class Game {
     if (!wasHost) {
       this._botPrefix = Math.random().toString(36).slice(2, 7);
       this._botNetId = 0;
-      this._proJoinT = randRange(8, 20);
+      this._proJoinT = this.serverFree ? Infinity : randRange(8, 20);
       this._botSnapT = 2;
       this._botStateT = 0;
       let spawned = 0;
-      while (this.enemies.length < this.serverBots && spawned < 8) {
-        this.spawnOnlineBot('normal');
+      while (this.enemies.length < this.serverBots && spawned < 12) {
+        // Free servers are pre-populated with a random mix of normal + pro AI.
+        this.spawnOnlineBot(this.serverFree && Math.random() < 0.4 ? 'pro' : 'normal');
         spawned++;
       }
     }
     this.sendBotSnapshot();
+    // If we were re-elected as host while the results/vote screen is up, take
+    // over the vote (the old host died mid-vote) so the round can still restart.
+    if (this.state.roundPhase === 'results') this.startVote();
   }
 
   onBotHostLost() {
@@ -441,7 +473,7 @@ export class Game {
   }
 
   updateBotHost(dt) {
-    // Top up the creator-configured regular bots (0-4).
+    // Top up the creator-configured regular bots (0-4, or the free-server pack).
     if (this.enemies.length < this.serverBots) {
       this.state.joinTimer -= dt;
       if (this.state.joinTimer <= 0) {
@@ -449,12 +481,21 @@ export class Game {
         this.state.joinTimer = randRange(3, 8);
       }
     }
-    // Secret pro bots slip in one at a time, pretending to be players (max 5).
-    this._proJoinT -= dt;
-    if (this._proJoinT <= 0) {
-      this._proJoinT = randRange(20, 45);
-      const proCount = this.enemies.filter((e) => e.isPro).length;
-      if (proCount < MAX_PRO_BOTS) this.spawnOnlineBot('pro');
+    // Free servers are never full — when humans exceed capacity, bots inside
+    // "leave" one by one to make room (they are replaced by real players).
+    if (this.serverFree) {
+      const humans = 1 + this.remotes.size;
+      const excess = Math.max(0, humans - this.serverCapacity);
+      const botTarget = Math.max(0, this.serverBots - excess);
+      if (this.enemies.length > botTarget) this.removeLowestBot();
+    } else {
+      // Secret pro bots slip in one at a time, pretending to be players (max 5).
+      this._proJoinT -= dt;
+      if (this._proJoinT <= 0) {
+        this._proJoinT = randRange(20, 45);
+        const proCount = this.enemies.filter((e) => e.isPro).length;
+        if (proCount < MAX_PRO_BOTS) this.spawnOnlineBot('pro');
+      }
     }
     // Broadcast bot states at ~10 Hz + a periodic snapshot to sync scores.
     this._botStateT -= dt;
@@ -522,6 +563,194 @@ export class Game {
   }
   // --------------------------------------------------------------------------
 
+  // ---- Play-again vote (shown when a match ends) ---------------------------
+  // Host is the authority: it tallies humans + bots, broadcasts the tally, and
+  // when the timer runs out everyone who agreed replays; the rest are kicked.
+  static get VOTE_TIME() { return 15; }
+
+  voteTotal() {
+    return 1 + this.remotes.size + this.enemies.length;
+  }
+
+  startVote() {
+    this.vote = {
+      active: true, closed: false,
+      yes: 0, total: this.voteTotal(),
+      left: Game.VOTE_TIME,
+      votes: new Map(), // id -> true (only yes votes are tracked)
+      myVote: false
+    };
+    for (const b of this.enemies) { b._voteAt = randRange(2, 9); b._voteDone = false; }
+    if (this.onlineRoomId && this.isBotHost) this.network.send({ t: 'vote-open', total: this.vote.total });
+    this.menu?.showVotePanel();
+    this.updateVotePanel();
+  }
+
+  castMyVote() {
+    if (!this.vote || !this.vote.active || this.vote.myVote) return;
+    this.vote.myVote = true;
+    if (this.onlineRoomId) {
+      this.network.send({ t: 'myvote', v: 1 });
+      if (this.isBotHost && this.vote) this.vote.votes.set('me', true);
+    } else if (this.vote) {
+      this.vote.votes.set('me', true);
+    }
+    this.updateVotePanel();
+  }
+
+  onNetVote(fromId, v) {
+    if (!this.isBotHost || !this.vote || !this.vote.active) return;
+    if (v && !this.vote.votes.has(fromId)) this.vote.votes.set(fromId, true);
+  }
+
+  onVoteOpen(total) {
+    if (!this.onlineRoomId || this.isBotHost) return;
+    if (this.vote && this.vote.active) return;
+    this.vote = { active: true, closed: false, yes: 0, total, left: Game.VOTE_TIME, votes: new Map(), myVote: false };
+    this.menu?.showVotePanel();
+    this.updateVotePanel();
+  }
+
+  onVoteTally(yes, total, left) {
+    if (!this.vote || this.isBotHost) return;
+    this.vote.yes = yes;
+    this.vote.total = total;
+    this.vote.left = left;
+    this.updateVotePanel();
+  }
+
+  onVoteClose(replay) {
+    if (!this.vote || this.vote.closed) return;
+    this.vote.closed = true;
+    this.vote.active = false;
+    if (replay) this.doReplay();
+    else { try { this.leaveOnlineServer(); } catch { /* ignore */ } location.reload(); }
+  }
+
+  onHostRoundEnd() {
+    // The host's timer decided the match is over — jump to the ceremony + vote.
+    if (this.state.phase === 'playing' && this.state.roundPhase === 'playing' && this.onlineRoomId && !this.isBotHost) {
+      this.beginCeremony();
+    }
+  }
+
+  updateVote(dt) {
+    if (!this.vote || !this.vote.active) return;
+    const amAuthority = !this.onlineRoomId || this.isBotHost;
+    if (amAuthority) {
+      this.vote.left -= dt;
+      // Bots vote on their own (mostly yes) so the counter climbs like real players.
+      for (const b of this.enemies) {
+        if (b._voteDone) continue;
+        b._voteAt -= dt;
+        if (b._voteAt <= 0) {
+          b._voteDone = true;
+          if (Math.random() < 0.75) this.vote.votes.set(b.netId || b.stats.name, true);
+        }
+      }
+      this.vote.yes = this.vote.votes.size;
+      if (this.vote.yes >= this.vote.total) { this.finishVote(true); return; }
+      if (this.vote.left <= 0) { this.finishVote(false); return; }
+      this._voteUiT -= dt;
+      if (this._voteUiT <= 0) {
+        this._voteUiT = 0.5;
+        if (this.onlineRoomId) this.network.send({ t: 'vote', yes: this.vote.yes, total: this.vote.total, left: Math.max(0, Math.ceil(this.vote.left)) });
+      }
+    }
+    this.updateVotePanel();
+  }
+
+  updateVotePanel() {
+    if (!this.vote || !this.menu) return;
+    const bonus = this.vote.myVote && this.onlineRoomId && !this.isBotHost ? 1 : 0;
+    this.menu.updateVotePanel({
+      yes: this.vote.yes + bonus,
+      total: this.vote.total,
+      left: Math.max(0, Math.ceil(this.vote.left)),
+      voted: this.vote.myVote
+    });
+  }
+
+  finishVote(unanimous) {
+    if (!this.vote || this.vote.closed) return;
+    this.vote.closed = true;
+    this.vote.active = false;
+    if (unanimous) {
+      if (this.onlineRoomId && this.isBotHost) this.network.send({ t: 'voteclose', replay: true });
+      this.doReplay();
+      return;
+    }
+    // Timer ran out: everyone who agreed replays, the rest are kicked.
+    const iVotedYes = this.vote.votes.has('me');
+    if (this.onlineRoomId && this.isBotHost) {
+      if (iVotedYes) {
+        const kickIds = [...this.remotes.keys()].filter((id) => !this.vote.votes.has(id));
+        if (kickIds.length) this.network.send({ t: 'kick', ids: kickIds });
+        this.network.send({ t: 'voteclose', replay: true });
+        this.doReplay();
+      } else {
+        this.network.send({ t: 'voteclose', replay: false });
+        try { this.leaveOnlineServer(); } catch { /* ignore */ }
+        location.reload();
+      }
+    } else if (!this.onlineRoomId) {
+      if (iVotedYes) this.doReplay();
+      else location.reload(); // didn't agree → back to the menu
+    }
+    // (non-hosts act on the voteclose / kick messages instead)
+  }
+
+  doReplay() {
+    this.menu.hideResults();
+    this.vote = null;
+    this.hud.hideDeath();
+    for (const f of [this.player, ...this.enemies, ...this.netBots.values()]) {
+      if (!f) continue;
+      f.stats.kills = 0;
+      f.stats.deaths = 0;
+      f.rig.removeCrown();
+      f._ceremonyCelebrate = false;
+      f._crownPlace = 0;
+      f._voteDone = false;
+    }
+    for (const f of this.enemies) {
+      if (f.dead) {
+        const avoid = this.enemies.filter((o) => o !== f && !o.dead).map((o) => ({ pos: o.pos, radius: 9 }));
+        f.respawn(this.spawn.getSpawn(avoid));
+      } else {
+        f.hp = f.maxHp;
+        f.invulnT = 1.4;
+      }
+    }
+    if (this.player) {
+      this.player.respawn(this.spawn.getSpawn([{ pos: this.player.pos, radius: 6 }]));
+      this.hud.setHP(this.player.hp, this.player.maxHp);
+      this.hud.setScore(0, 0);
+    }
+    this.state.roundLeft = 480;
+    this.state.roundPhase = 'playing';
+    this.state.roundRunning = true;
+    if (this.onlineRoomId) this.state.targetBots = this.isBotHost ? this.serverBots : 0;
+    this.state.joinTimer = randRange(4, 10);
+    this.state.leaveTimer = randRange(60, 120);
+    this.state.pendingJoinT = 0;
+    this.state.phase = 'playing';
+    this.hud.setRoundTimer(this.state.roundLeft);
+    this.hud.setTop3([]);
+    this.hud.announce('REMATCH! Good luck, fighters');
+    this.cameraRig.snap(this.player ? this.player.pos : new THREE.Vector3());
+    this.lockPointer();
+  }
+
+  onKickedFromServer() {
+    if (this._kickedHandled) return;
+    this._kickedHandled = true;
+    this.hud?.announce('You were kicked — you did not agree to play again', 'left');
+    this.menu?.hideResults();
+    setTimeout(() => location.reload(), 2200);
+  }
+  // --------------------------------------------------------------------------
+
   leaveOnlineServer() {
     if (this.onlineRoomId) this.backend.leaveServer(this.onlineRoomId);
     this.onlineRoomId = null;
@@ -532,10 +761,12 @@ export class Game {
     this.state.targetBots = 0;
   }
 
-  startOnline(serverId, map, bots) {
+  startOnline(serverId, map, bots, free = false, capacity = 12) {
     this.leaveOnlineServer();
     this.onlineRoomId = serverId;
-    this.serverBots = Math.max(0, Math.min(4, Math.round(Number(bots) || 0)));
+    this.serverFree = !!free;
+    this.serverCapacity = Math.max(2, Math.round(Number(capacity) || 12));
+    this.serverBots = Math.max(0, Math.min(this.serverFree ? 10 : 4, Math.round(Number(bots) || 0)));
     this.isBotHost = false;
     this.state.targetBots = 0; // set properly once we learn whether we are the host
     if (map && THEMES[map]) { this.state.settings.map = map; if (this.state.phase === 'menu') this.applyMap(map); }
@@ -955,14 +1186,25 @@ export class Game {
       this.cameraRig.update(dt, this.player ? this.player.pos : null, 'play');
       if (this.ceremonyT <= 0) {
         this.state.roundPhase = 'results';
-        this.menu.showResults(this.top3, () => this.startOver());
+        this.menu.showResults(this.top3, {
+          onVoteYes: () => this.castMyVote(),
+          onLeave: () => {
+            try { this.leaveOnlineServer(); } catch (e) { /* ignore */ }
+            this.syncProfileToBackend();
+            location.reload();
+          }
+        });
         this.input.unlock();
+        // The match authority opens the play-again vote; others wait for vote-open.
+        if (!this.onlineRoomId || this.isBotHost) this.startVote();
+        else if (this.vote && this.vote.active) this.updateVotePanel();
       }
       return;
     }
 
     if (this.state.roundPhase === 'results') {
       this.combat.update(dt);
+      this.updateVote(dt);
       return;
     }
 
@@ -1012,7 +1254,13 @@ export class Game {
       if (this.state.roundLeft <= 0) {
         this.state.roundLeft = 0;
         this.hud.setRoundTimer(0);
-        this.beginCeremony();
+        if (this.onlineRoomId && !this.isBotHost) {
+          // Hold at 0:00 — the host decides when the match ends (keeps every
+          // client's match-end + play-again vote synchronized).
+        } else {
+          if (this.onlineRoomId && this.isBotHost) this.network.send({ t: 'round-end' });
+          this.beginCeremony();
+        }
         return;
       }
       this._hudT -= dt;
@@ -1127,6 +1375,12 @@ export class Game {
     this.ceremonyT = 5;
     this.ceremonyFighters = [];
 
+    // Record the placement medal for the local player (gold/silver/bronze).
+    if (this.player) {
+      const myPlace = rows.findIndex((r) => r.name === this.player.stats.name) + 1;
+      if (myPlace > 0) this.addMedal(myPlace);
+    }
+
     const pIdx = rows.findIndex((r) => r.name === this.player.stats.name);
     if (pIdx === 0) {
       this.addCoins(500);
@@ -1158,33 +1412,6 @@ export class Game {
     this.audio.tone({ f0: 523, dur: 0.15, type: 'triangle', gain: 0.2 });
     this.audio.tone({ f0: 659, dur: 0.15, type: 'triangle', gain: 0.2, delay: 0.15 });
     this.audio.tone({ f0: 784, dur: 0.3, type: 'triangle', gain: 0.22, delay: 0.3 });
-  }
-
-  startOver() {
-    this.menu.hideResults();
-    for (const f of [this.player, ...this.enemies, ...this.netBots.values()]) {
-      if (!f) continue;
-      f.stats.kills = 0;
-      f.stats.deaths = 0;
-      f.rig.removeCrown();
-      f._ceremonyCelebrate = false;
-      f._crownPlace = 0;
-      if (f instanceof RemotePlayer) continue; // network-driven fighters are repositioned by their owner
-      const avoid = this.enemies
-        .filter((o) => o !== f && !o.dead)
-        .map((o) => ({ pos: o.pos, radius: 9 }));
-      f.respawn(this.spawn.getSpawn(avoid));
-    }
-    this.state.roundLeft = 480;
-    this.state.roundPhase = 'playing';
-    this.state.roundRunning = true;
-    this.state.targetBots = 14;
-    this.state.phase = 'playing';
-    this.hud.setScore(0, 0);
-    this.hud.setRoundTimer(this.state.roundLeft);
-    this.hud.setTop3([]);
-    this.cameraRig.snap(this.player.pos);
-    this.lockPointer();
   }
 
   setPlayerName(raw) {

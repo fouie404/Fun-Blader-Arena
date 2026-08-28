@@ -16,6 +16,9 @@ const FRONTEND_DIR = process.env.FRONTEND_DIR
   : path.resolve(__dirname, '../dist');
 
 const store = openStore();
+// Make sure the 4 always-joinable free servers exist (they look player-made and
+// are never shown as full — a bot inside makes room when a real player joins).
+if (store.ensureFreeServers) store.ensureFreeServers();
 
 /* ---------------------------------------------------------------- */
 /* Auth helpers                                                        */
@@ -50,7 +53,8 @@ function requireAuth(req, res, next) {
   next();
 }
 const publicUser = (u) => ({
-  id: u.id, username: u.username, coins: u.coins, diamonds: u.diamonds, skins: u.skins
+  id: u.id, username: u.username, coins: u.coins, diamonds: u.diamonds, skins: u.skins,
+  winsG: u.winsG || 0, winsS: u.winsS || 0, winsB: u.winsB || 0
 });
 
 const app = express();
@@ -104,10 +108,14 @@ app.get('/api/me', requireAuth, (req, res) => {
 /* ---------------- Profile sync ---------------- */
 app.post('/api/me/push', requireAuth, (req, res) => {
   const patch = req.body || {};
+  const num = (v) => (typeof v === 'number' ? Math.max(0, Math.round(v)) : undefined);
   const nxt = store.updateUser(req.user.id, {
-    coins: typeof patch.coins === 'number' ? patch.coins : undefined,
-    diamonds: typeof patch.diamonds === 'number' ? patch.diamonds : undefined,
-    skins: Array.isArray(patch.skins) ? patch.skins : undefined
+    coins: num(patch.coins),
+    diamonds: num(patch.diamonds),
+    skins: Array.isArray(patch.skins) ? patch.skins : undefined,
+    winsG: num(patch.winsG),
+    winsS: num(patch.winsS),
+    winsB: num(patch.winsB)
   });
   res.json({ ok: true, profile: publicUser(nxt) });
 });
@@ -130,7 +138,7 @@ app.post('/api/servers', requireAuth, (req, res) => {
     capacity: req.body?.capacity,
     bots: req.body?.bots
   });
-  res.json({ ok: true, server: { id: s.id, name: s.name, hostId: s.hostId, hostName: req.user.username, map: s.map, capacity: s.capacity, bots: s.bots } });
+  res.json({ ok: true, server: { id: s.id, name: s.name, hostId: s.hostId, hostName: req.user.username, map: s.map, capacity: s.capacity, bots: s.bots, free: !!s.isFree } });
 });
 
 app.post('/api/servers/:id/join', requireAuth, (req, res) => {
@@ -141,7 +149,7 @@ app.post('/api/servers/:id/join', requireAuth, (req, res) => {
   }
   const s = r.server;
   const host = store.getUserById && store.getUserById(s.hostId);
-  res.json({ ok: true, server: { id: s.id, name: s.name, hostId: s.hostId, hostName: host ? host.username : s.hostId, map: s.map, capacity: s.capacity, bots: s.bots, playerCount: s.players.length } });
+  res.json({ ok: true, server: { id: s.id, name: s.name, hostId: s.hostId, hostName: host ? host.username : s.hostId, map: s.map, capacity: s.capacity, bots: s.bots, playerCount: s.players.length, free: !!s.isFree } });
 });
 
 app.post('/api/servers/:id/leave', requireAuth, (req, res) => {
@@ -232,6 +240,20 @@ wss.on('connection', (ws, req) => {
       return;
     }
     const sender = wsUser.get(ws);
+    // Only the current host may kick — used by the play-again vote to remove
+    // players who didn't agree. Kicked sockets get code 4003.
+    if (m.t === 'kick' && Array.isArray(m.ids)) {
+      const host = hostOf(roomId);
+      if (host && sender && host.id === sender.id) {
+        const meta2 = roomsMeta.get(roomId);
+        if (meta2) {
+          for (const [sock, mm] of [...meta2]) {
+            if (mm && m.ids.includes(mm.id)) { try { sock.close(4003, 'kicked'); } catch { /* ignore */ } }
+          }
+        }
+      }
+      return;
+    }
     roomPush(roomId, { ...m, from: sender?.username, fromId: sender?.id });
   });
 

@@ -52,10 +52,11 @@ export class NetworkManager {
       this.socket.onmessage = (e) => {
         try { this.handle(JSON.parse(e.data)); } catch (err) { /* ignore bad packet */ }
       };
-      this.socket.onclose = () => {
+      this.socket.onclose = (e) => {
         this.connected = false;
         this.myId = null;
         this.hostId = null;
+        if (e && e.code === 4003) this.game.onKickedFromServer();
         for (const id of [...this.game.remotes.keys()]) this.game.removeRemotePlayer(id);
       };
       this.socket.onerror = () => { this.connected = false; };
@@ -120,6 +121,22 @@ export class NetworkManager {
         break;
       case 'botattack':
         if (m.id) this.game.netBotAttack(m.id, m.type);
+        break;
+      // ---- play-again vote + match-end sync (host = authority) ----
+      case 'round-end':
+        this.game.onHostRoundEnd();
+        break;
+      case 'vote-open':
+        this.game.onVoteOpen(m.total || 0);
+        break;
+      case 'vote':
+        this.game.onVoteTally(m.yes || 0, m.total || 0, m.left || 0);
+        break;
+      case 'voteclose':
+        this.game.onVoteClose(!!m.replay);
+        break;
+      case 'myvote':
+        if (m.fromId) this.game.onNetVote(m.fromId, !!m.v);
         break;
       case 'hit': {
         if (typeof m.targetId === 'string' && m.targetId.startsWith('bot:')) {

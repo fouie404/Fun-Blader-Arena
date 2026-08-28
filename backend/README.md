@@ -34,6 +34,23 @@ Env vars:
 - `POST /api/servers/:id/join`  { password? }    (Bearer)
 - `POST /api/servers/:id/leave`                  (Bearer)
 
+### Free servers
+On boot the backend seeds 4 permanent **free servers** (`free-1` … `free-4`, e.g. "1v1 ME BRO",
+"PROS ONLY") with player-looking host names and 6–10 AI (normal + pro mix) that appear as soon
+as the first joiner (who becomes the room host) spawns them. Free servers are **never shown as
+full** — joining always succeeds, and when humans exceed the 12 slots the host drops bots one
+by one so real players always get in.
+
+### Accounts: extra stats
+Users additionally persist `winsG` / `winsS` / `winsB` (gold/silver/bronze — top-3 placements at
+match end), synced through `/api/me/push` and returned in every profile payload.
+
+### Play-again vote
+At match end the room host runs a 15 s play-again vote over the WS (`vote-open`, `vote` tally,
+`voteclose`). Humans and bots both vote; if everyone agrees the round restarts instantly.
+When the timer runs out, everyone who agreed replays and the host `kick`s the rest — the
+backend closes those sockets with code **4003** (only the current host may kick).
+
 ## Real-time
 - `ws://host/ws?token=<jwt>&server=<serverId>` — join a server room
   - protocol messages: `welcome`, `roster`, `host`, `state`, `attack`, `hit`, `player-joined`, `player-left`, `bots`, `bstates`, `botattack`, `ping/pong`

@@ -140,9 +140,9 @@ export class BackendClient {
     return r.ok;
   }
 
-  async pushProfile(coins, diamonds, skins) {
+  async pushProfile(coins, diamonds, skins, winsG, winsS, winsB) {
     if (!this.authed) return;
-    try { await this._req('POST', '/api/me/push', { coins, diamonds, skins }); } catch { /* ignore */ }
+    try { await this._req('POST', '/api/me/push', { coins, diamonds, skins, winsG, winsS, winsB }); } catch { /* ignore */ }
   }
 
   async addOwnedSkin(skinId) {

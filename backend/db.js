@@ -33,7 +33,7 @@ class MemoryStore {
   createUser({ username, passHash }) {
     if (this.users.has(username)) return { ok: false, err: 'taken' };
     const id = 'u' + this._seq++;
-    const u = { id, username, passHash, coins: 500, diamonds: 0, skins: [] };
+    const u = { id, username, passHash, coins: 500, diamonds: 0, skins: [], winsG: 0, winsS: 0, winsB: 0 };
     this.users.set(username, u);
     return { ok: true, user: u };
   }
@@ -56,6 +56,9 @@ class MemoryStore {
     if (!u) return null;
     if (typeof patch.coins === 'number') u.coins = Math.max(0, Math.round(patch.coins));
     if (typeof patch.diamonds === 'number') u.diamonds = Math.max(0, Math.round(patch.diamonds));
+    if (typeof patch.winsG === 'number') u.winsG = Math.max(0, Math.round(patch.winsG));
+    if (typeof patch.winsS === 'number') u.winsS = Math.max(0, Math.round(patch.winsS));
+    if (typeof patch.winsB === 'number') u.winsB = Math.max(0, Math.round(patch.winsB));
     if (Array.isArray(patch.skins)) {
       u.skins = [...new Set(patch.skins.map(String))];
     }
@@ -71,8 +74,37 @@ class MemoryStore {
 
   roster() {
     return [...this.users.values()].map((u) => ({
-      id: u.id, username: u.username, coins: u.coins, diamonds: u.diamonds, skins: u.skins
+      id: u.id, username: u.username, coins: u.coins, diamonds: u.diamonds, skins: u.skins,
+      winsG: u.winsG || 0, winsS: u.winsS || 0, winsB: u.winsB || 0
     }));
+  }
+
+  // 4 permanent free servers that look player-made. They are never "full":
+  // joining always succeeds and the hosting client drops bots to make room.
+  ensureFreeServers() {
+    const FREE = [
+      { id: 'free-1', hostId: 'sys-host-1', hostName: 'DarkSlayer_PH', name: '1v1 ME BRO' },
+      { id: 'free-2', hostId: 'sys-host-2', hostName: 'xXKingBladeXx', name: 'PROS ONLY' },
+      { id: 'free-3', hostId: 'sys-host-3', hostName: 'luckygamer09', name: 'Chill Arena' },
+      { id: 'free-4', hostId: 'sys-host-4', hostName: 'SilentReaper7', name: 'COIN FARM' }
+    ];
+    const MAPS = ['citadel', 'moonlight', 'ember', 'frost', 'golden', 'temple', 'catacombs', 'cove', 'caverns', 'neon'];
+    FREE.forEach((f, i) => {
+      if (!this.users.has(f.hostName)) {
+        this.users.set(f.hostName, {
+          id: f.hostId, username: f.hostName, passHash: 'x.y', coins: 0, diamonds: 0, skins: [],
+          winsG: 0, winsS: 0, winsB: 0
+        });
+      }
+      if (!this.servers.has(f.id)) {
+        this.servers.set(f.id, {
+          id: f.id, name: f.name, hostId: f.hostId, password: null,
+          map: MAPS[(i * 3 + 1) % MAPS.length], capacity: 12,
+          bots: 6 + Math.floor(Math.random() * 5),
+          players: [f.hostId], created: Date.now(), isFree: true
+        });
+      }
+    });
   }
 
   createServer(hostId, name, opts = {}) {
@@ -99,24 +131,24 @@ class MemoryStore {
   listServers() {
     const out = [];
     for (const s of this.servers.values()) {
-      if (s.players.length >= s.capacity) continue;
+      if (!s.isFree && s.players.length >= s.capacity) continue; // free servers are never "full"
       const host = this.getUserById(s.hostId);
       out.push({
         id: s.id, name: s.name, hostId: s.hostId,
         hostName: host ? host.username : s.hostId,
         map: s.map, capacity: s.capacity, playerCount: s.players.length,
-        bots: s.bots, hasPassword: !!s.password, created: s.created
+        bots: s.bots, hasPassword: !!s.password, created: s.created, isFree: !!s.isFree
       });
     }
-    return out.sort((a, b) => b.created - a.created);
+    return out.sort((a, b) => (b.isFree ? 1 : 0) - (a.isFree ? 1 : 0) || b.created - a.created);
   }
 
   joinServer(id, userId, password) {
     const s = this.servers.get(id);
     if (!s) return { ok: false, err: 'notfound' };
     if (s.players.includes(userId)) return { ok: true, server: s };
-    if (s.players.length >= s.capacity) return { ok: false, err: 'full' };
     if (s.password && s.password !== password) return { ok: false, err: 'pass' };
+    if (!s.isFree && s.players.length >= s.capacity) return { ok: false, err: 'full' };
     s.players.push(userId);
     return { ok: true, server: s };
   }
