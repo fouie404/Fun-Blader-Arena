@@ -691,6 +691,30 @@ kbd {
   border-color: #d8a02a;
 }
 
+/* create-server dropdowns (map / slots / bots) */
+.menu-select {
+  flex: 1;
+  padding: 8px 12px;
+  background: rgba(10, 8, 14, 0.7);
+  border: 1px solid rgba(201, 162, 39, 0.45);
+  border-radius: 6px;
+  color: #ffe9ad;
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 1px;
+  outline: none;
+  cursor: pointer;
+}
+
+.menu-select:focus {
+  border-color: #d8a02a;
+}
+
+.menu-select option {
+  background: #1d1a24;
+  color: #ffe9ad;
+}
+
 #promo-status {
   min-height: 18px;
   text-align: center;

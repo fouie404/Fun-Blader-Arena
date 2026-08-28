@@ -28,13 +28,17 @@ Env vars:
 - `POST /api/me/skin`  { skin }                  (Bearer)
 - `GET  /api/servers`                            — open server list
 - `POST /api/servers`  { name, map?, capacity?, bots?, password? }   (Bearer, create)
+  - `map` — any theme id (`citadel`, `moonlight`, `ember`, `frost`, `golden`, `temple`, `catacombs`, `cove`, `caverns`, `neon`)
+  - `capacity` — player slots, 2–15 (default 8)
+  - `bots` — regular AI knights, 0–4 (default 2)
 - `POST /api/servers/:id/join`  { password? }    (Bearer)
 - `POST /api/servers/:id/leave`                  (Bearer)
 
 ## Real-time
 - `ws://host/ws?token=<jwt>&server=<serverId>` — join a server room
-  - protocol messages: `welcome`, `config`, `state`, `attack`, `hit`, `peer-left`, `ping/pong`
+  - protocol messages: `welcome`, `roster`, `host`, `state`, `attack`, `hit`, `player-joined`, `player-left`, `bots`, `bstates`, `botattack`, `ping/pong`
   - the backend relays messages to everyone in that room
+  - **Host-authoritative bots:** the oldest room member is the host (`welcome`/`roster` carry `hostId`; a `host` message announces re-election when the host leaves). Only the host's client simulates bots and broadcasts `bots` (snapshot), `bstates` (10 Hz state batch) and `botattack`; every other client renders those bots and simulates none — no duplicate bots, no invisible-bot damage.
 
 ## Deploy
 

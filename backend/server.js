@@ -183,6 +183,15 @@ function roomRoster(roomId) {
   return [...meta.values()].map((u) => ({ id: u.id, name: u.name, skin: u.skin || 'knight', map: u.map }));
 }
 
+// The oldest member of the room (Map preserves insertion order) is the host.
+// The host's client is the single authority that simulates and broadcasts bots,
+// so every client sees the exact same bots (no duplicates, no invisible damage).
+function hostOf(roomId) {
+  const meta = roomsMeta.get(roomId);
+  if (!meta || meta.size === 0) return null;
+  return meta.values().next().value || null;
+}
+
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, 'http://x');
   const uid = parseToken(url.searchParams.get('token') || '');
@@ -203,7 +212,7 @@ wss.on('connection', (ws, req) => {
   meta.set(ws, myMeta);
   room.add(ws);
 
-  ws.send(JSON.stringify({ t: 'welcome', id: myId, roomId }));
+  ws.send(JSON.stringify({ t: 'welcome', id: myId, roomId, hostId: (hostOf(roomId) || myMeta).id }));
   ws.send(JSON.stringify({ t: 'hello-req' }));
 
   ws.on('message', (raw) => {
@@ -216,8 +225,8 @@ wss.on('connection', (ws, req) => {
       if (typeof m.name === 'string' && m.name) myMeta.name = m.name.slice(0, 16);
       if (typeof m.skin === 'string') myMeta.skin = m.skin;
       if (typeof m.map === 'string') myMeta.map = m.map;
-      // tell joiner the current roster
-      ws.send(JSON.stringify({ t: 'roster', peers: roomRoster(roomId) }));
+      // tell joiner the current roster (and who hosts the bots)
+      ws.send(JSON.stringify({ t: 'roster', peers: roomRoster(roomId), hostId: (hostOf(roomId) || myMeta).id }));
       // tell existing members a player joined (exclude self)
       roomPush(roomId, { t: 'player-joined', peer: { id: myId, name: myMeta.name, skin: myMeta.skin, map: myMeta.map }, fromId: myId });
       return;
@@ -228,9 +237,15 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     const peer = meta.get(ws);
+    const wasHost = !!(peer && hostOf(roomId) && hostOf(roomId).id === peer.id);
     meta.delete(ws);
     room.delete(ws);
     if (room.size === 0) { rooms.delete(roomId); roomsMeta.delete(roomId); }
+    else if (wasHost) {
+      // Re-elect the next-oldest member and tell everyone so bot authority moves over.
+      const nh = hostOf(roomId);
+      if (nh) roomPush(roomId, { t: 'host', id: nh.id });
+    }
     if (peer) roomPush(roomId, { t: 'player-left', id: peer.id });
     store.leaveServer(roomId, user.id);
   });

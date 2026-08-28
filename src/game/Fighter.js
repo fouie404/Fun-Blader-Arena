@@ -238,7 +238,7 @@ export class Fighter {
     this.rig.setHealthBar(this.hp / this.maxHp);
   }
 
-  takeDamage(amount, attacker, hitPoint) {
+  takeDamage(amount, attacker, hitPoint, opts = {}) {
     void hitPoint;
     if (this.dead || this.invulnT > 0) return null;
 
@@ -248,7 +248,9 @@ export class Fighter {
     const nx = dx / len, nz = dz / len;
     const f = this.fwd(_dir);
     const facingDot = f.x * -nx + f.z * -nz;
-    const blocked = this.blocking && facingDot > -0.15 && !this.attack;
+    // opts.final = damage already resolved (blocking applied) by the authoritative
+    // simulator — used for network-relayed hits so blocking is not reduced twice.
+    const blocked = opts.final ? false : (this.blocking && facingDot > -0.15 && !this.attack);
 
     const dmg = blocked ? BLOCK_DMG : amount;
     this.hp = Math.max(0, this.hp - dmg);

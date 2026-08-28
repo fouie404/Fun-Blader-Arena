@@ -125,10 +125,22 @@ export class Menu {
 
         <div class="menu-panel" id="panel-online" style="display:none">
           <div class="panel-title small">ONLINE ARENA</div>
-          <div class="skin-hint" id="online-status">Online multiplayer — other logged-in players can join your room.</div>
+          <div class="skin-hint" id="online-status">Online multiplayer — create a server or join one. Up to 5 secret PRO fighters may sneak into any arena over time.</div>
           <div class="setting-row">
             <label>Room name</label>
             <input type="text" id="srv-name" maxlength="24" placeholder="My Arena" autocomplete="off" />
+          </div>
+          <div class="setting-row">
+            <label>Map</label>
+            <select id="srv-map" class="menu-select"></select>
+          </div>
+          <div class="setting-row">
+            <label>Player slots</label>
+            <select id="srv-slots" class="menu-select"></select>
+          </div>
+          <div class="setting-row">
+            <label>Add bots</label>
+            <select id="srv-bots" class="menu-select"></select>
           </div>
           <div class="srv-actions">
             <button class="menu-btn small" id="btn-create-server">CREATE SERVER</button>
@@ -157,6 +169,32 @@ export class Menu {
     `;
     document.body.appendChild(this.root);
     this.pushAd(this.root.querySelector('.adsbygoogle'));
+
+    // Populate the create-server options: map (all themes), player slots (2-15),
+    // regular bots (0-4). Secret pro bots are NOT configurable — they join on their own.
+    const srvMap = this.root.querySelector('#srv-map');
+    for (const [id, t] of Object.entries(THEMES)) {
+      const o = document.createElement('option');
+      o.value = id;
+      o.textContent = t.name || id;
+      srvMap.appendChild(o);
+    }
+    const srvSlots = this.root.querySelector('#srv-slots');
+    for (let n = 2; n <= 15; n++) {
+      const o = document.createElement('option');
+      o.value = String(n);
+      o.textContent = `${n} players`;
+      if (n === 8) o.selected = true;
+      srvSlots.appendChild(o);
+    }
+    const srvBots = this.root.querySelector('#srv-bots');
+    for (let n = 0; n <= 4; n++) {
+      const o = document.createElement('option');
+      o.value = String(n);
+      o.textContent = n === 0 ? 'No bots' : `${n} bot${n > 1 ? 's' : ''}`;
+      if (n === 2) o.selected = true;
+      srvBots.appendChild(o);
+    }
 
     this.pauseOverlay = null;
 
@@ -574,7 +612,7 @@ export class Menu {
       <button class="server-row" data-id="${s.id}">
         <span class="server-name">${s.name || 'Arena'}</span>
         <span class="server-host">by ${s.hostName || s.hostId}</span>
-        <span class="server-meta">${s.map || 'citadel'} &middot; ${s.playerCount || 0}/${s.capacity} ${s.hasPassword ? '&middot; <b>LOCKED</b>' : ''}</span>
+        <span class="server-meta">${s.map || 'citadel'} &middot; ${s.playerCount || 0}/${s.capacity} players &middot; ${s.bots || 0} bot${(s.bots || 0) === 1 ? '' : 's'} ${s.hasPassword ? '&middot; <b>LOCKED</b>' : ''}</span>
       </button>`).join('');
     for (const row of list.querySelectorAll('.server-row')) {
       row.addEventListener('click', () => this.joinServerFlow(row.dataset.id));
@@ -584,13 +622,16 @@ export class Menu {
   createServerFlow() {
     const input = this.root.querySelector('#srv-name');
     const name = (input && input.value.trim()) || 'My Arena';
-    this.createServer(name);
+    const map = (this.root.querySelector('#srv-map') || {}).value || 'citadel';
+    const capacity = Number((this.root.querySelector('#srv-slots') || {}).value) || 8;
+    const bots = Number((this.root.querySelector('#srv-bots') || {}).value);
+    this.createServer(name, { map, capacity, bots: Number.isFinite(bots) ? bots : 2 });
   }
 
-  async createServer(name) {
+  async createServer(name, opts = {}) {
     const status = this.root.querySelector('#online-status');
     if (status) { status.textContent = 'Creating server…'; status.style.color = '#9dff7a'; }
-    const res = await this.onCreateServer(name, { map: 'citadel', capacity: 8, bots: 10 });
+    const res = await this.onCreateServer(name, { map: 'citadel', capacity: 8, bots: 2, ...opts });
     if (!res.ok && status) { status.textContent = res.err || 'Failed to create server.'; status.style.color = '#ff8a7a'; }
     else if (!res.ok) { /* no status el */ }
     else this.refreshServerList();

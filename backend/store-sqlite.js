@@ -112,8 +112,8 @@ export function createStore(dbFile) {
       const rec = {
         id, name: String(name || 'Arena').slice(0, 24), hostId,
         password: opts.password || null, map: opts.map || 'citadel',
-        capacity: Math.min(16, Math.max(2, Number(opts.capacity) || 8)),
-        bots: Math.max(0, Math.min(15, Number(opts.bots) || 10)),
+        capacity: Math.min(15, Math.max(2, opts.capacity == null ? 8 : (Number(opts.capacity) || 2))),
+        bots: Math.max(0, Math.min(4, opts.bots == null ? 2 : Math.round(Number(opts.bots) || 0))),
         players: [hostId], created: Date.now()
       };
       IS.run({ ...rec, players: JSON.stringify(rec.players) });

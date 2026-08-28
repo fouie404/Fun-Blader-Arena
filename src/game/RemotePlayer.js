@@ -57,7 +57,9 @@ export class RemotePlayer extends Fighter {
         t: 'hit',
         targetId: this.netId,
         dmg: res.dmg,
-        blocked: res.blocked
+        blocked: res.blocked,
+        by: (attacker && attacker.stats && attacker.stats.name) || attacker?.name || null,
+        isP: !!(attacker && attacker.isPlayer)
       });
     }
     return res;

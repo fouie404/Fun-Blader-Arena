@@ -19,10 +19,14 @@ import { Scoreboard } from '../ui/Scoreboard.js';
 import { MobileControls } from '../ui/MobileControls.js';
 import { AudioManager } from '../audio/AudioManager.js';
 import { Input } from '../utils/Input.js';
-import { randRange } from '../utils/MathUtils.js';
+import { randRange, clamp } from '../utils/MathUtils.js';
 
 const FREE_SKINS = Object.keys(SKINS).filter((k) => SKINS[k].rarity === 'free');
 const NORMAL_SKINS = Object.keys(SKINS).filter((k) => SKINS[k].rarity === 'free' || SKINS[k].rarity === 'common');
+const PRO_SKINS = Object.keys(SKINS).filter((k) => SKINS[k].rarity === 'ad' || SKINS[k].rarity === 'rare');
+// Secret "pro" bots: per server, at most 5 of these player-like fighters join
+// individually over time. They are NOT chosen by the server creator.
+const MAX_PRO_BOTS = 5;
 
 export class Game {
   constructor(container) {
@@ -45,6 +49,15 @@ export class Game {
     this.backend = new BackendClient();
     this.network = new NetworkManager(this, this.backend);
     this.remotes = new Map();
+    // Bots rendered from the host's broadcasts (non-host clients only).
+    this.netBots = new Map();
+    this.isBotHost = false;
+    this.serverBots = 2;      // regular bots configured by the server creator (0-4)
+    this._botPrefix = '';
+    this._botNetId = 0;
+    this._proJoinT = 0;
+    this._botStateT = 0;
+    this._botSnapT = 0;
 
     // If a saved account token exists, refresh its profile (silently, offline-safe).
     if (this.backend.authed) {
@@ -320,11 +333,6 @@ export class Game {
     this.remotes.set(id, rp);
     this.state.register(stats);
     this.hud?.announce(`${stats.name} joined the server`);
-    // Bots fill empty slots — a real player replaces the weakest bot when room is full.
-    if (this.onlineRoomId && (this.enemies.length + this.remotes.size) > this.onlineBotCap) {
-      this.removeLowestBot();
-    }
-    if (this.onlineRoomId) this.state.targetBots = Math.max(0, Math.round(this.onlineBotCap - this.remotes.size));
   }
 
   removeRemotePlayer(id) {
@@ -336,22 +344,200 @@ export class Game {
     this.scene.remove(rp.rig.root);
     try { rp.rig.dispose(); } catch { /* ignore */ }
     this.hud?.announce(`${rp.name || 'a player'} left the server`, 'left');
-    // Refill the freed slot with a bot.
-    if (this.onlineRoomId) this.state.targetBots = Math.max(0, this.onlineBotCap - this.remotes.size);
-    this.addBotWithAnnounce();
   }
+
+  // ---- Host-authoritative online bots -------------------------------------
+  // Only the room host runs bot AI; everyone else renders the host's bots
+  // (netBots). This kills the old bug where every client had its own private
+  // bot army: duplicated bots, plus damage from bots you could not see.
+
+  destroyNetBot(nb, announce = true) {
+    if (!nb) return;
+    this.netBots.delete(nb.netId);
+    this.combat.unregister(nb);
+    this.state.unregister(nb.stats.name);
+    this.scene.remove(nb.rig.root);
+    try { nb.rig.dispose(); } catch { /* ignore */ }
+    if (announce) this.hud?.announce(`${nb.stats.name} has left the server`, 'left');
+  }
+
+  clearNetBots(announce = false) {
+    for (const nb of [...this.netBots.values()]) this.destroyNetBot(nb, announce);
+    this.netBots.clear();
+  }
+
+  onBecomeBotHost() {
+    if (!this.onlineRoomId) return;
+    const wasHost = this.isBotHost;
+    this.isBotHost = true;
+    this.clearNetBots(); // any rendered copies become real, locally-simulated bots
+    this.state.targetBots = this.serverBots;
+    if (!wasHost) {
+      this._botPrefix = Math.random().toString(36).slice(2, 7);
+      this._botNetId = 0;
+      this._proJoinT = randRange(8, 20);
+      this._botSnapT = 2;
+      this._botStateT = 0;
+      let spawned = 0;
+      while (this.enemies.length < this.serverBots && spawned < 8) {
+        this.spawnOnlineBot('normal');
+        spawned++;
+      }
+    }
+    this.sendBotSnapshot();
+  }
+
+  onBotHostLost() {
+    if (!this.isBotHost) return;
+    this.isBotHost = false;
+    for (const b of this.enemies) {
+      this.combat.unregister(b);
+      this.scene.remove(b.rig.root);
+      b.rig.dispose();
+    }
+    this.enemies.length = 0;
+    this.state.targetBots = 0;
+    this.hud?.announce('Bot host left — waiting for new host…', 'left');
+  }
+
+  spawnOnlineBot(tier) {
+    const pool = tier === 'pro'
+      ? (PRO_SKINS.length ? PRO_SKINS : NORMAL_SKINS)
+      : NORMAL_SKINS;
+    const skinId = pool[Math.floor(Math.random() * pool.length)] || 'knight';
+    const avoid = this.enemies.filter((e) => !e.dead).map((e) => ({ pos: e.pos, radius: 8 }));
+    const bot = new Enemy(this, this._botCounter++, this.spawn.getSpawn(avoid), SKINS[skinId] || SKINS.knight, skinId, tier === 'pro' ? 'pro' : 'normal');
+    bot.netId = `bot:${this._botPrefix || 'h'}-${this._botNetId++}`;
+    this.enemies.push(bot);
+    this.hud.announce(`${bot.stats.name} has joined the server`);
+    this.sendBotSnapshot();
+    return bot;
+  }
+
+  sendBotSnapshot() {
+    if (!this.onlineRoomId || !this.isBotHost || !this.network.connectedNow) return;
+    const list = this.enemies
+      .filter((e) => e.netId)
+      .map((e) => ({ id: e.netId, name: e.stats.name, skin: e.rig.skinId, pro: !!e.isPro, k: e.stats.kills, d: e.stats.deaths }));
+    this.network.send({ t: 'bots', list });
+  }
+
+  sendBotStates() {
+    if (!this.onlineRoomId || !this.isBotHost || !this.network.connectedNow) return;
+    const b = [];
+    for (const e of this.enemies) {
+      if (!e.netId) continue;
+      b.push([
+        e.netId,
+        +e.pos.x.toFixed(2), +e.pos.y.toFixed(2), +e.pos.z.toFixed(2),
+        +e.yaw.toFixed(2),
+        +Math.hypot(e.vel.x, e.vel.z).toFixed(1),
+        e.blocking ? 1 : 0,
+        e.dead ? 1 : 0,
+        Math.round(clamp(e.hp, 0, 100))
+      ]);
+    }
+    this.network.send({ t: 'bstates', b });
+  }
+
+  updateBotHost(dt) {
+    // Top up the creator-configured regular bots (0-4).
+    if (this.enemies.length < this.serverBots) {
+      this.state.joinTimer -= dt;
+      if (this.state.joinTimer <= 0) {
+        this.spawnOnlineBot('normal');
+        this.state.joinTimer = randRange(3, 8);
+      }
+    }
+    // Secret pro bots slip in one at a time, pretending to be players (max 5).
+    this._proJoinT -= dt;
+    if (this._proJoinT <= 0) {
+      this._proJoinT = randRange(20, 45);
+      const proCount = this.enemies.filter((e) => e.isPro).length;
+      if (proCount < MAX_PRO_BOTS) this.spawnOnlineBot('pro');
+    }
+    // Broadcast bot states at ~10 Hz + a periodic snapshot to sync scores.
+    this._botStateT -= dt;
+    if (this._botStateT <= 0) { this._botStateT = 0.1; this.sendBotStates(); }
+    this._botSnapT -= dt;
+    if (this._botSnapT <= 0) { this._botSnapT = 4; this.sendBotSnapshot(); }
+    // Relay attack animations so peers see bots swing.
+    for (const e of this.enemies) {
+      if (!e.netId) continue;
+      const key = e.attack ? e.attack.def.key : '';
+      if (key && key !== e._netAtkKey) this.network.send({ t: 'botattack', id: e.netId, type: key });
+      e._netAtkKey = key;
+    }
+  }
+
+  setNetBots(list) {
+    if (!this.onlineRoomId || this.isBotHost) return;
+    const seen = new Set();
+    for (const b of list) {
+      if (!b || !b.id) continue;
+      seen.add(b.id);
+      let nb = this.netBots.get(b.id);
+      if (!nb) {
+        const stats = { name: String(b.name || 'fighter').slice(0, 16), kills: b.k | 0, deaths: b.d | 0 };
+        const spawnPos = this.spawn.getSpawn([{ pos: this.player ? this.player.pos : new THREE.Vector3(), radius: 8 }]);
+        nb = new RemotePlayer(this, b.id, stats, spawnPos, SKINS[b.skin] ? b.skin : 'knight');
+        this.netBots.set(b.id, nb);
+        this.state.register(stats);
+        this.hud?.announce(`${stats.name} has joined the server`);
+      } else {
+        nb.stats.kills = b.k | 0;
+        nb.stats.deaths = b.d | 0;
+      }
+    }
+    for (const [id, nb] of [...this.netBots]) {
+      if (!seen.has(id)) this.destroyNetBot(nb, true);
+    }
+  }
+
+  applyNetBotStates(arr) {
+    for (const s of arr) {
+      if (!Array.isArray(s) || s.length < 9) continue;
+      const nb = this.netBots.get(s[0]);
+      if (!nb) continue;
+      nb.applyState({ x: s[1], y: s[2], z: s[3], yaw: s[4], spd: s[5], blk: s[6], dead: s[7], hp: s[8] });
+    }
+  }
+
+  netBotAttack(id, type) {
+    const nb = this.netBots.get(id);
+    if (nb) nb.applyAttack(type);
+  }
+
+  // A net-bot I rendered was hit (by me) — the host resolves the real damage.
+  applyBotHit(m) {
+    if (!this.isBotHost) return;
+    const bot = this.enemies.find((e) => e.netId === m.targetId);
+    if (!bot || bot.dead) return;
+    const atk = {
+      pos: bot.pos.clone(),
+      stats: m.by ? { name: m.by, kills: 0, deaths: 0 } : null,
+      isPlayer: !!m.isP
+    };
+    bot.takeDamage(m.dmg, atk, null, { final: true });
+  }
+  // --------------------------------------------------------------------------
 
   leaveOnlineServer() {
     if (this.onlineRoomId) this.backend.leaveServer(this.onlineRoomId);
     this.onlineRoomId = null;
+    this.isBotHost = false;
     this.network.dispose();
     for (const id of [...this.remotes.keys()]) this.removeRemotePlayer(id);
+    this.clearNetBots();
+    this.state.targetBots = 0;
   }
 
   startOnline(serverId, map, bots) {
     this.leaveOnlineServer();
     this.onlineRoomId = serverId;
-    this.onlineBotCap = (typeof bots === 'number' && bots > 0) ? Math.min(15, bots) : 10;
+    this.serverBots = Math.max(0, Math.min(4, Math.round(Number(bots) || 0)));
+    this.isBotHost = false;
+    this.state.targetBots = 0; // set properly once we learn whether we are the host
     if (map && THEMES[map]) { this.state.settings.map = map; if (this.state.phase === 'menu') this.applyMap(map); }
     this.network.connect(serverId, {
       name: this.state.settings.playerName,
@@ -359,12 +545,8 @@ export class Game {
       map: this.state.settings.map
     });
     this.hud?.announce('Connecting to online arena…');
-    if (this.state.phase === 'menu') {
-      this.startMatch('play');
-      // Enforce the server's bot-cap: bots fill any slots not occupied by real players.
-      this.state.targetBots = this.onlineBotCap;
-      while (this.enemies.length < this.onlineBotCap) this.addBotWithAnnounce();
-    }
+    if (this.state.phase === 'menu') this.startMatch('play');
+    // Bots are spawned by onBecomeBotHost() once the backend tells us we host them.
   }
 
   spawnDiamond() {
@@ -408,7 +590,7 @@ export class Game {
     this.audio.ensure();
     this.audio.uiClick();
 
-    const resumeExisting = mode === 'play' && this.state.roundRunning && this.enemies.length > 0;
+    const resumeExisting = !this.onlineRoomId && mode === 'play' && this.state.roundRunning && this.enemies.length > 0;
 
     if (!resumeExisting) {
       for (const b of this.enemies) {
@@ -420,7 +602,11 @@ export class Game {
       this.slots.used = 0;
 
       let timer;
-      if (mode === 'random') {
+      if (this.onlineRoomId) {
+        // Online: bots are owned by the room host — none are spawned here.
+        timer = 480;
+        this.state.targetBots = 0;
+      } else if (mode === 'random') {
         timer = Math.random() < 0.2 ? 180 + Math.floor(Math.random() * 61) : 300 + Math.floor(Math.random() * 121);
         this.state.targetBots = 10 + Math.floor(Math.random() * 6);
         const mapKeys = Object.keys(THEMES);
@@ -433,40 +619,42 @@ export class Game {
       this.state.roundRunning = true;
       this.state.roundPhase = 'playing';
 
-      const elapsedMin = (480 - timer) / 60;
-      const skilledTotal = 1 + Math.floor(Math.random() * 3);
-      const proTotal = 3 + Math.floor(Math.random() * 4);
-      const proSkins = Object.keys(SKINS).filter((k) => SKINS[k].rarity === 'ad' || SKINS[k].rarity === 'rare');
-      const skilledSkins = Object.keys(SKINS).filter(
-        (k) => SKINS[k].rarity === 'legendary' || SKINS[k].rarity === 'mythical' || (SKINS[k].rarity === 'godly' && Math.random() < 0.3)
-      );
-      for (let i = proSkins.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [proSkins[i], proSkins[j]] = [proSkins[j], proSkins[i]];
-      }
-      const initial = mode === 'random'
-        ? Math.max(6, this.state.targetBots - Math.floor(Math.random() * 5))
-        : 4 + Math.floor(Math.random() * 4);
+      if (!this.onlineRoomId) {
+        const elapsedMin = (480 - timer) / 60;
+        const skilledTotal = 1 + Math.floor(Math.random() * 3);
+        const proTotal = 3 + Math.floor(Math.random() * 4);
+        const proSkins = Object.keys(SKINS).filter((k) => SKINS[k].rarity === 'ad' || SKINS[k].rarity === 'rare');
+        const skilledSkins = Object.keys(SKINS).filter(
+          (k) => SKINS[k].rarity === 'legendary' || SKINS[k].rarity === 'mythical' || (SKINS[k].rarity === 'godly' && Math.random() < 0.3)
+        );
+        for (let i = proSkins.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [proSkins[i], proSkins[j]] = [proSkins[j], proSkins[i]];
+        }
+        const initial = mode === 'random'
+          ? Math.max(6, this.state.targetBots - Math.floor(Math.random() * 5))
+          : 4 + Math.floor(Math.random() * 4);
 
-      for (let i = 0; i < initial; i++) {
-        let skinId;
-        let tier = 'normal';
-        if (i < skilledTotal) {
-          tier = 'skilled';
-          skinId = skilledSkins[Math.floor(Math.random() * skilledSkins.length)] || 'gladiatorgold';
-        } else if (i < skilledTotal + proTotal) {
-          tier = 'pro';
-          skinId = proSkins[Math.floor(Math.random() * proSkins.length)] || 'thunderguard';
-        } else {
-          skinId = NORMAL_SKINS[Math.floor(Math.random() * NORMAL_SKINS.length)];
+        for (let i = 0; i < initial; i++) {
+          let skinId;
+          let tier = 'normal';
+          if (i < skilledTotal) {
+            tier = 'skilled';
+            skinId = skilledSkins[Math.floor(Math.random() * skilledSkins.length)] || 'gladiatorgold';
+          } else if (i < skilledTotal + proTotal) {
+            tier = 'pro';
+            skinId = proSkins[Math.floor(Math.random() * proSkins.length)] || 'thunderguard';
+          } else {
+            skinId = NORMAL_SKINS[Math.floor(Math.random() * NORMAL_SKINS.length)];
+          }
+          const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 8 }));
+          const bot = new Enemy(this, this._botCounter++, this.spawn.getSpawn(avoid), SKINS[skinId], skinId, tier);
+          if (mode === 'random') {
+            bot.stats.kills = Math.max(0, Math.round(elapsedMin * 10 * (0.2 + Math.random())));
+            bot.stats.deaths = Math.round(bot.stats.kills * (0.3 + Math.random() * 0.7));
+          }
+          this.enemies.push(bot);
         }
-        const avoid = this.enemies.map((e) => ({ pos: e.pos, radius: 8 }));
-        const bot = new Enemy(this, this._botCounter++, this.spawn.getSpawn(avoid), SKINS[skinId], skinId, tier);
-        if (mode === 'random') {
-          bot.stats.kills = Math.max(0, Math.round(elapsedMin * 10 * (0.2 + Math.random())));
-          bot.stats.deaths = Math.round(bot.stats.kills * (0.3 + Math.random() * 0.7));
-        }
-        this.enemies.push(bot);
       }
     }
 
@@ -588,7 +776,7 @@ export class Game {
   }
 
   emitAura(dt) {
-    const all = [this.player, ...this.enemies];
+    const all = [this.player, ...this.enemies, ...this.netBots.values()];
     for (const f of all) {
       if (!f || f.dead) continue;
       const skin = SKINS[f.rig.skinId];
@@ -804,6 +992,7 @@ export class Game {
 
     for (const e of this.enemies) e.update(dt);
     for (const r of this.remotes.values()) r.update(dt);
+    for (const nb of this.netBots.values()) nb.update(dt);
     this.network.update(dt);
     // Bridge own-player attacks to the network so peers animate them.
     if (this.network.connectedNow && this.player) {
@@ -835,7 +1024,7 @@ export class Game {
       if (this._topT <= 0) {
         this._topT = 0.5;
         const byName = new Map();
-        for (const f of [this.player, ...this.enemies, ...this.remotes.values()]) {
+        for (const f of [this.player, ...this.enemies, ...this.remotes.values(), ...this.netBots.values()]) {
           if (f) byName.set(f.stats.name, f);
         }
         const top = this.state
@@ -851,7 +1040,7 @@ export class Game {
         top.forEach((r, i) => {
           if (r.kills > 0) placeByName.set(r.name, i + 1);
         });
-        for (const f of [this.player, ...this.enemies]) {
+        for (const f of [this.player, ...this.enemies, ...this.netBots.values()]) {
           if (!f) continue;
           const place = placeByName.get(f.stats.name) || 0;
           if ((f._crownPlace || 0) !== place) {
@@ -862,7 +1051,10 @@ export class Game {
         }
       }
 
-      if (this.enemies.length < this.state.targetBots) {
+      if (this.onlineRoomId) {
+        // Online: bots exist only on the room host's client.
+        if (this.isBotHost) this.updateBotHost(dt);
+      } else if (this.enemies.length < this.state.targetBots) {
         this.state.joinTimer -= dt;
         if (this.state.joinTimer <= 0) {
           this.addBotWithAnnounce();
@@ -875,7 +1067,7 @@ export class Game {
           this.state.leaveTimer = randRange(60, 120);
         }
       }
-      if (this.state.pendingJoinT > 0) {
+      if (!this.onlineRoomId && this.state.pendingJoinT > 0) {
         this.state.pendingJoinT -= dt;
         if (this.state.pendingJoinT <= 0) {
           this.state.pendingJoinT = 0;
@@ -949,9 +1141,9 @@ export class Game {
       this.hud.announce('TOP 3! +150 coins');
     }
 
-    for (const f of [this.player, ...this.enemies]) {
+    for (const f of [this.player, ...this.enemies, ...this.netBots.values()]) {
       if (!f) continue;
-      if (f.dead) {
+      if (f.dead && !(f instanceof RemotePlayer)) {
         const sp = this.spawn.getSpawn([{ pos: this.player.pos, radius: 8 }]);
         f.respawn(sp);
       }
@@ -970,13 +1162,14 @@ export class Game {
 
   startOver() {
     this.menu.hideResults();
-    for (const f of [this.player, ...this.enemies]) {
+    for (const f of [this.player, ...this.enemies, ...this.netBots.values()]) {
       if (!f) continue;
       f.stats.kills = 0;
       f.stats.deaths = 0;
       f.rig.removeCrown();
       f._ceremonyCelebrate = false;
       f._crownPlace = 0;
+      if (f instanceof RemotePlayer) continue; // network-driven fighters are repositioned by their owner
       const avoid = this.enemies
         .filter((o) => o !== f && !o.dead)
         .map((o) => ({ pos: o.pos, radius: 9 }));

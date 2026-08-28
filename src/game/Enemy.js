@@ -129,8 +129,8 @@ export class Enemy extends Fighter {
     }
   }
 
-  takeDamage(amount, attacker, hitPoint) {
-    const res = super.takeDamage(amount, attacker, hitPoint);
+  takeDamage(amount, attacker, hitPoint, opts = {}) {
+    const res = super.takeDamage(amount, attacker, hitPoint, opts);
     if (this.tauntT > 0) {
       this.tauntT = 0;
       this.setBlocking(false);

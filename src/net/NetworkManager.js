@@ -2,8 +2,9 @@ import { clamp } from '../utils/MathUtils.js';
 
 // NetworkManager — peer-to-peer room relay over the backend WebSocket.
 // Each client broadcasts its own player state; every client renders a RemotePlayer
-// for the other peers in the room. Bots fill empty slots locally and are replaced
-// by a RemotePlayer when a real peer joins. Works entirely offline if disconnected.
+// for the other peers in the room. ONLINE BOTS ARE HOST-AUTHORITATIVE: only the
+// room host simulates bots and broadcasts their state ('bots'/'bstates'/'botattack'),
+// so every client sees the exact same bots. Works entirely offline if disconnected.
 export class NetworkManager {
   constructor(game, backend) {
     this.game = game;
@@ -11,6 +12,7 @@ export class NetworkManager {
     this.socket = null;
     this.connected = false;
     this.myId = null;
+    this.hostId = null;
     this.roomId = null;
     this.name = '';
     this.skin = 'knight';
@@ -18,11 +20,25 @@ export class NetworkManager {
     this.sendTimer = 0;
   }
 
+  get amHost() {
+    return !!(this.myId && this.hostId && this.myId === this.hostId);
+  }
+
+  _setHost(id) {
+    if (!id || id === this.hostId) return;
+    const wasMe = this.amHost;
+    this.hostId = id;
+    const isMe = this.amHost;
+    if (isMe) this.game.onBecomeBotHost();
+    else if (wasMe) this.game.onBotHostLost();
+  }
+
   connect(roomId, opts = {}) {
     this.roomId = roomId;
     this.name = opts.name || this.game.state.settings.playerName || 'player';
     this.skin = opts.skin || this.game.state.settings.skin || 'knight';
     this.map = opts.map || 'citadel';
+    this.hostId = null;
     if (this.socket) { try { this.socket.close(); } catch { /* ignore */ } }
     if (!this.backend || !this.backend.token) { this.connected = false; return; }
     try {
@@ -39,6 +55,7 @@ export class NetworkManager {
       this.socket.onclose = () => {
         this.connected = false;
         this.myId = null;
+        this.hostId = null;
         for (const id of [...this.game.remotes.keys()]) this.game.removeRemotePlayer(id);
       };
       this.socket.onerror = () => { this.connected = false; };
@@ -62,8 +79,10 @@ export class NetworkManager {
     switch (m.t) {
       case 'welcome':
         this.myId = m.id;
+        this._setHost(m.hostId || null);
         break;
       case 'roster': {
+        if (m.hostId) this._setHost(m.hostId);
         if (Array.isArray(m.peers)) {
           for (const p of m.peers) {
             if (p.id && p.id !== this.myId) this.game.addRemotePlayer(p);
@@ -71,6 +90,9 @@ export class NetworkManager {
         }
         break;
       }
+      case 'host':
+        this._setHost(m.id || null);
+        break;
       case 'player-joined':
         if (m.peer && m.peer.id && m.peer.id !== this.myId) this.game.addRemotePlayer(m.peer);
         break;
@@ -89,14 +111,28 @@ export class NetworkManager {
         if (r) r.applyAttack(m.type);
         break;
       }
+      // ---- host-authoritative bots ----
+      case 'bots': // full bot snapshot from the host
+        this.game.setNetBots(m.list || []);
+        break;
+      case 'bstates': // 10 Hz bot state batch: [id, x, y, z, yaw, spd, blk, dead, hp]
+        if (Array.isArray(m.b)) this.game.applyNetBotStates(m.b);
+        break;
+      case 'botattack':
+        if (m.id) this.game.netBotAttack(m.id, m.type);
+        break;
       case 'hit': {
+        if (typeof m.targetId === 'string' && m.targetId.startsWith('bot:')) {
+          this.game.applyBotHit(m); // a net-bot (owned by the host) was hit — host applies it
+          break;
+        }
         if (m.targetId === this.myId && this.game.player && !this.game.player.dead) {
           const atk = {
             pos: this.game.player.pos.clone().add(this.game.player.fwd().multiplyScalar(-2)),
-            stats: null,
-            isPlayer: false
+            stats: m.by ? { name: m.by, kills: 0, deaths: 0 } : null,
+            isPlayer: !!m.isP
           };
-          this.game.player.takeDamage(m.dmg, atk, null);
+          this.game.player.takeDamage(m.dmg, atk, null, { final: true });
         }
         break;
       }
@@ -130,5 +166,6 @@ export class NetworkManager {
     this.socket = null;
     this.connected = false;
     this.myId = null;
+    this.hostId = null;
   }
 }
