@@ -35,17 +35,19 @@ export function createStore(dbFile) {
       capacity INTEGER NOT NULL DEFAULT 8,
       bots INTEGER NOT NULL DEFAULT 10,
       players TEXT NOT NULL DEFAULT '[]',
-      created INTEGER NOT NULL,
-      isFree INTEGER NOT NULL DEFAULT 0
+      created INTEGER NOT NULL
     );
   `);
-  // Migrations for databases created before wins/isFree existed.
+  // Migrations for databases created before wins existed.
   for (const stmt of [
     'ALTER TABLE users ADD COLUMN winsG INTEGER NOT NULL DEFAULT 0',
     'ALTER TABLE users ADD COLUMN winsS INTEGER NOT NULL DEFAULT 0',
-    'ALTER TABLE users ADD COLUMN winsB INTEGER NOT NULL DEFAULT 0',
-    'ALTER TABLE servers ADD COLUMN isFree INTEGER NOT NULL DEFAULT 0'
+    'ALTER TABLE users ADD COLUMN winsB INTEGER NOT NULL DEFAULT 0'
   ]) { try { db.exec(stmt); } catch { /* column already exists */ } }
+  // One-time cleanup: remove the old auto-seeded "free servers" (and their fake
+  // host accounts) from databases created while that feature existed.
+  try { db.exec("DELETE FROM servers WHERE isFree = 1"); } catch { /* column not present */ }
+  try { db.exec("DELETE FROM users WHERE id LIKE 'sys-host-%'"); } catch { /* ignore */ }
 
   const IU = db.prepare('INSERT INTO users (id, username, passHash, coins, diamonds, skins, winsG, winsS, winsB) VALUES (@id, @username, @passHash, @coins, @diamonds, @skins, @winsG, @winsS, @winsB)');
   const UU = db.prepare('UPDATE users SET coins=@coins, diamonds=@diamonds, skins=@skins, winsG=@winsG, winsS=@winsS, winsB=@winsB WHERE id=@id');
@@ -53,15 +55,15 @@ export function createStore(dbFile) {
   const GUB = db.prepare('SELECT * FROM users WHERE id=?');
   const RU = db.prepare('SELECT * FROM users');
 
-  const IS = db.prepare('INSERT INTO servers (id, name, hostId, password, map, capacity, bots, players, created, isFree) VALUES (@id, @name, @hostId, @password, @map, @capacity, @bots, @players, @created, @isFree)');
+  const IS = db.prepare('INSERT INTO servers (id, name, hostId, password, map, capacity, bots, players, created) VALUES (@id, @name, @hostId, @password, @map, @capacity, @bots, @players, @created)');
   const US = db.prepare('UPDATE servers SET players=@players WHERE id=@id');
   const GS = db.prepare('SELECT * FROM servers WHERE id=?');
   const RS = db.prepare('SELECT * FROM servers');
-  const RSJ = db.prepare('SELECT s.id, s.name, s.hostId, s.password, s.map, s.capacity, s.bots, s.players, s.created, s.isFree, u.username AS hostName FROM servers s LEFT JOIN users u ON u.id = s.hostId');
+  const RSJ = db.prepare('SELECT s.id, s.name, s.hostId, s.password, s.map, s.capacity, s.bots, s.players, s.created, u.username AS hostName FROM servers s LEFT JOIN users u ON u.id = s.hostId');
   const DS = db.prepare('DELETE FROM servers WHERE id=?');
 
   const toUser = (r) => (r ? { id: r.id, username: r.username, passHash: r.passHash, coins: r.coins, diamonds: r.diamonds, skins: JSON.parse(r.skins), winsG: r.winsG || 0, winsS: r.winsS || 0, winsB: r.winsB || 0 } : null);
-  const toServer = (r) => (r ? { id: r.id, name: r.name, hostId: r.hostId, hostName: r.hostName || null, password: r.password, map: r.map, capacity: r.capacity, bots: r.bots, players: JSON.parse(r.players), created: r.created, isFree: !!r.isFree } : null);
+  const toServer = (r) => (r ? { id: r.id, name: r.name, hostId: r.hostId, hostName: r.hostName || null, password: r.password, map: r.map, capacity: r.capacity, bots: r.bots, players: JSON.parse(r.players), created: r.created } : null);
 
   let seq = 1;
   // Seed the sequence from persisted rows so a backend restart never regenerates
@@ -122,35 +124,16 @@ export function createStore(dbFile) {
       }));
     },
 
-    // 4 permanent free servers that look player-made. Never "full": joining
-    // always succeeds and the hosting client drops bots to make room.
-    ensureFreeServers() {
-      const FREE = [
-        { id: 'free-1', hostId: 'sys-host-1', hostName: 'DarkSlayer_PH', name: '1v1 ME BRO' },
-        { id: 'free-2', hostId: 'sys-host-2', hostName: 'xXKingBladeXx', name: 'PROS ONLY' },
-        { id: 'free-3', hostId: 'sys-host-3', hostName: 'luckygamer09', name: 'Chill Arena' },
-        { id: 'free-4', hostId: 'sys-host-4', hostName: 'SilentReaper7', name: 'COIN FARM' }
-      ];
-      const MAPS = ['citadel', 'moonlight', 'ember', 'frost', 'golden', 'temple', 'catacombs', 'cove', 'caverns', 'neon'];
-      const IUS = db.prepare('INSERT OR IGNORE INTO users (id, username, passHash, coins, diamonds, skins, winsG, winsS, winsB) VALUES (?, ?, ?, 0, 0, ?, 0, 0, 0)');
-      const ISS = db.prepare('INSERT OR IGNORE INTO servers (id, name, hostId, password, map, capacity, bots, players, created, isFree) VALUES (?, ?, ?, NULL, ?, 12, ?, ?, ?, 1)');
-      FREE.forEach((f, i) => {
-        IUS.run(f.hostId, f.hostName, 'x.y', '[]');
-        const exists = GS.get(f.id);
-        if (!exists) {
-          ISS.run(f.id, f.name, f.hostId, MAPS[(i * 3 + 1) % MAPS.length], 6 + Math.floor(Math.random() * 5), JSON.stringify([f.hostId]), Date.now());
-        }
-      });
-    },
-
     createServer(hostId, name, opts = {}) {
       const id = 'srv-' + seq++;
+      const capacity = Math.min(15, Math.max(2, opts.capacity == null ? 8 : (Number(opts.capacity) || 2)));
       const rec = {
         id, name: String(name || 'Arena').slice(0, 24), hostId,
         password: opts.password || null, map: opts.map || 'citadel',
-        capacity: Math.min(15, Math.max(2, opts.capacity == null ? 8 : (Number(opts.capacity) || 2))),
-        bots: Math.max(0, Math.min(4, opts.bots == null ? 2 : Math.round(Number(opts.bots) || 0))),
-        players: [hostId], created: Date.now(), isFree: opts.isFree ? 1 : 0
+        capacity,
+        // Bots fill player slots, so they can occupy up to the whole limit.
+        bots: Math.max(0, Math.min(capacity, opts.bots == null ? 2 : Math.round(Number(opts.bots) || 0))),
+        players: [hostId], created: Date.now()
       };
       IS.run({ ...rec, players: JSON.stringify(rec.players) });
       return rec;
@@ -162,14 +145,16 @@ export function createStore(dbFile) {
 
     listServers() {
       return RSJ.all().map(toServer)
-        .filter((s) => s && (s.isFree || s.players.length < s.capacity))
+        // Every server stays listed — a joining player always gets in (a bot
+        // inside gives up its slot), so "full" servers are never hidden.
+        .filter((s) => s)
         .map((s) => ({
           id: s.id, name: s.name, hostId: s.hostId,
           hostName: s.hostName || s.hostId,
           map: s.map, capacity: s.capacity, playerCount: s.players.length,
-          bots: s.bots, hasPassword: !!s.password, created: s.created, isFree: !!s.isFree
+          bots: s.bots, hasPassword: !!s.password, created: s.created
         }))
-        .sort((a, b) => (b.isFree ? 1 : 0) - (a.isFree ? 1 : 0) || b.created - a.created);
+        .sort((a, b) => b.created - a.created);
     },
 
     joinServer(id, userId, password) {
@@ -177,7 +162,8 @@ export function createStore(dbFile) {
       if (!s) return { ok: false, err: 'notfound' };
       if (s.players.includes(userId)) return { ok: true, server: s };
       if (s.password && s.password !== password) return { ok: false, err: 'pass' };
-      if (!s.isFree && s.players.length >= s.capacity) return { ok: false, err: 'full' };
+      // No "full" rejection: bots cover the player slots, so a joining player
+      // simply replaces one of the bots (the room host's client handles that).
       s.players.push(userId);
       US.run({ id, players: JSON.stringify(s.players) });
       return { ok: true, server: s };

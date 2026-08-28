@@ -79,44 +79,18 @@ class MemoryStore {
     }));
   }
 
-  // 4 permanent free servers that look player-made. They are never "full":
-  // joining always succeeds and the hosting client drops bots to make room.
-  ensureFreeServers() {
-    const FREE = [
-      { id: 'free-1', hostId: 'sys-host-1', hostName: 'DarkSlayer_PH', name: '1v1 ME BRO' },
-      { id: 'free-2', hostId: 'sys-host-2', hostName: 'xXKingBladeXx', name: 'PROS ONLY' },
-      { id: 'free-3', hostId: 'sys-host-3', hostName: 'luckygamer09', name: 'Chill Arena' },
-      { id: 'free-4', hostId: 'sys-host-4', hostName: 'SilentReaper7', name: 'COIN FARM' }
-    ];
-    const MAPS = ['citadel', 'moonlight', 'ember', 'frost', 'golden', 'temple', 'catacombs', 'cove', 'caverns', 'neon'];
-    FREE.forEach((f, i) => {
-      if (!this.users.has(f.hostName)) {
-        this.users.set(f.hostName, {
-          id: f.hostId, username: f.hostName, passHash: 'x.y', coins: 0, diamonds: 0, skins: [],
-          winsG: 0, winsS: 0, winsB: 0
-        });
-      }
-      if (!this.servers.has(f.id)) {
-        this.servers.set(f.id, {
-          id: f.id, name: f.name, hostId: f.hostId, password: null,
-          map: MAPS[(i * 3 + 1) % MAPS.length], capacity: 12,
-          bots: 6 + Math.floor(Math.random() * 5),
-          players: [f.hostId], created: Date.now(), isFree: true
-        });
-      }
-    });
-  }
-
   createServer(hostId, name, opts = {}) {
     const id = 'srv-' + this._seq++;
+    const capacity = Math.min(15, Math.max(2, opts.capacity == null ? 8 : (Number(opts.capacity) || 2)));
     const rec = {
       id,
       name: String(name || 'Arena').slice(0, 24),
       hostId,
       password: opts.password || null,
       map: opts.map || 'citadel',
-      capacity: Math.min(15, Math.max(2, opts.capacity == null ? 8 : (Number(opts.capacity) || 2))),
-      bots: Math.max(0, Math.min(4, opts.bots == null ? 2 : Math.round(Number(opts.bots) || 0))),
+      capacity,
+      // Bots fill player slots, so they can occupy up to the whole limit.
+      bots: Math.max(0, Math.min(capacity, opts.bots == null ? 2 : Math.round(Number(opts.bots) || 0))),
       created: Date.now(),
       players: [hostId]
     };
@@ -131,16 +105,17 @@ class MemoryStore {
   listServers() {
     const out = [];
     for (const s of this.servers.values()) {
-      if (!s.isFree && s.players.length >= s.capacity) continue; // free servers are never "full"
+      // Every server stays listed — a joining player always gets in (a bot
+      // inside gives up its slot), so "full" servers are never hidden.
       const host = this.getUserById(s.hostId);
       out.push({
         id: s.id, name: s.name, hostId: s.hostId,
         hostName: host ? host.username : s.hostId,
         map: s.map, capacity: s.capacity, playerCount: s.players.length,
-        bots: s.bots, hasPassword: !!s.password, created: s.created, isFree: !!s.isFree
+        bots: s.bots, hasPassword: !!s.password, created: s.created
       });
     }
-    return out.sort((a, b) => (b.isFree ? 1 : 0) - (a.isFree ? 1 : 0) || b.created - a.created);
+    return out.sort((a, b) => b.created - a.created);
   }
 
   joinServer(id, userId, password) {
@@ -148,7 +123,8 @@ class MemoryStore {
     if (!s) return { ok: false, err: 'notfound' };
     if (s.players.includes(userId)) return { ok: true, server: s };
     if (s.password && s.password !== password) return { ok: false, err: 'pass' };
-    if (!s.isFree && s.players.length >= s.capacity) return { ok: false, err: 'full' };
+    // No "full" rejection: bots cover the player slots, so a joining player
+    // simply replaces one of the bots (the room host's client handles that).
     s.players.push(userId);
     return { ok: true, server: s };
   }

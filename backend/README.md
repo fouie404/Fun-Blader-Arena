@@ -29,17 +29,20 @@ Env vars:
 - `GET  /api/servers`                            — open server list
 - `POST /api/servers`  { name, map?, capacity?, bots?, password? }   (Bearer, create)
   - `map` — any theme id (`citadel`, `moonlight`, `ember`, `frost`, `golden`, `temple`, `catacombs`, `cove`, `caverns`, `neon`)
-  - `capacity` — player slots, 2–15 (default 8)
-  - `bots` — regular AI knights, 0–4 (default 2)
+  - `capacity` — player/bot limit, 2–15 (default 8)
+  - `bots` — bots at start; they fill the player slots, so they clamp to `capacity`
+  - `password` — set it to make the server **private** (passcode required to join)
 - `POST /api/servers/:id/join`  { password? }    (Bearer)
+  - private servers must match their passcode; servers are **never rejected as full** —
+    a joining player takes a bot's slot (the room host's client swaps the bot out)
 - `POST /api/servers/:id/leave`                  (Bearer)
 
-### Free servers
-On boot the backend seeds 4 permanent **free servers** (`free-1` … `free-4`, e.g. "1v1 ME BRO",
-"PROS ONLY") with player-looking host names and 6–10 AI (normal + pro mix) that appear as soon
-as the first joiner (who becomes the room host) spawns them. Free servers are **never shown as
-full** — joining always succeeds, and when humans exceed the 12 slots the host drops bots one
-by one so real players always get in.
+### Slots, bots & secret pros
+`capacity` is the total player/bot limit. The host's client spawns the configured bots the
+moment the server is created, so the arena starts full. When a real player joins a full arena
+the lowest-scoring bot gives up its slot ("…has left the server"); when a player leaves, bots
+refill the freed slot. On **public** servers, up to 5 secret PRO fighters join individually
+over time while a free slot remains. **Private** servers never get secret pros.
 
 ### Accounts: extra stats
 Users additionally persist `winsG` / `winsS` / `winsB` (gold/silver/bronze — top-3 placements at

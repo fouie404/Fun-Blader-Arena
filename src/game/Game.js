@@ -52,9 +52,9 @@ export class Game {
     // Bots rendered from the host's broadcasts (non-host clients only).
     this.netBots = new Map();
     this.isBotHost = false;
-    this.serverBots = 2;      // regular bots configured by the server creator (0-4)
-    this.serverFree = false;  // free servers: pre-populated AI, never full
-    this.serverCapacity = 12;
+    this.serverBots = 2;      // bots at start (they fill the server's player slots)
+    this.serverCapacity = 12; // player/bot limit — total fighters allowed
+    this.serverPrivate = false;
     this.vote = null;         // play-again vote state
     this._voteUiT = 0;
     this._botPrefix = '';
@@ -119,12 +119,12 @@ export class Game {
       onListServers: () => this.backend.listServers(),
       onCreateServer: async (name, opts) => {
         const r = await this.backend.createServer(name, opts);
-        if (r.ok) this.startOnline(r.server.id, r.server.map, r.server.bots, r.server.free, r.server.capacity);
+        if (r.ok) this.startOnline(r.server.id, r.server.map, r.server.bots, r.server.capacity, r.server.hasPassword);
         return r;
       },
       onJoinServer: async (id, password) => {
         const r = await this.backend.joinServer(id, password);
-        if (r.ok) this.startOnline(r.server.id, r.server.map, r.server.bots, r.server.free, r.server.capacity);
+        if (r.ok) this.startOnline(id, r.server.map, r.server.bots, r.server.capacity, r.server.hasPassword);
         return r;
       }
     });
@@ -361,6 +361,8 @@ export class Game {
     this.remotes.set(id, rp);
     this.state.register(stats);
     this.hud?.announce(`${stats.name} joined the server`);
+    // On the host: a joining player takes a bot's slot when the arena is full.
+    this.reconcileBots();
   }
 
   removeRemotePlayer(id) {
@@ -372,6 +374,8 @@ export class Game {
     this.scene.remove(rp.rig.root);
     try { rp.rig.dispose(); } catch { /* ignore */ }
     this.hud?.announce(`${rp.name || 'a player'} left the server`, 'left');
+    // On the host: the freed slot is refilled by a bot (updateBotHost's timer).
+    this.reconcileBots();
   }
 
   // ---- Host-authoritative online bots -------------------------------------
@@ -403,13 +407,17 @@ export class Game {
     if (!wasHost) {
       this._botPrefix = Math.random().toString(36).slice(2, 7);
       this._botNetId = 0;
-      this._proJoinT = this.serverFree ? Infinity : randRange(8, 20);
+      // Secret pro bots sneak in later — public servers only.
+      this._proJoinT = this.serverPrivate ? Infinity : randRange(8, 20);
       this._botSnapT = 2;
       this._botStateT = 0;
+      // The configured bots spawn immediately and fill the server's slots
+      // (the host counts as one occupied player/bot slot).
+      const humans = 1 + this.remotes.size;
+      const spawnCount = Math.min(this.serverBots, Math.max(0, this.serverCapacity - humans));
       let spawned = 0;
-      while (this.enemies.length < this.serverBots && spawned < 12) {
-        // Free servers are pre-populated with a random mix of normal + pro AI.
-        this.spawnOnlineBot(this.serverFree && Math.random() < 0.4 ? 'pro' : 'normal');
+      while (this.enemies.length < spawnCount && spawned < 16) {
+        this.spawnOnlineBot('normal');
         spawned++;
       }
     }
@@ -473,28 +481,26 @@ export class Game {
   }
 
   updateBotHost(dt) {
-    // Top up the creator-configured regular bots (0-4, or the free-server pack).
-    if (this.enemies.length < this.serverBots) {
+    const humans = 1 + this.remotes.size;
+    // Bots fill the server's slots: keep the configured bot count while there
+    // is room (players always win a slot — reconcileBots() trims on join).
+    const target = Math.min(this.serverBots, Math.max(0, this.serverCapacity - humans));
+    const regular = this.enemies.filter((e) => !e.isPro);
+    if (regular.length < target) {
       this.state.joinTimer -= dt;
       if (this.state.joinTimer <= 0) {
         this.spawnOnlineBot('normal');
         this.state.joinTimer = randRange(3, 8);
       }
     }
-    // Free servers are never full — when humans exceed capacity, bots inside
-    // "leave" one by one to make room (they are replaced by real players).
-    if (this.serverFree) {
-      const humans = 1 + this.remotes.size;
-      const excess = Math.max(0, humans - this.serverCapacity);
-      const botTarget = Math.max(0, this.serverBots - excess);
-      if (this.enemies.length > botTarget) this.removeLowestBot();
-    } else {
-      // Secret pro bots slip in one at a time, pretending to be players (max 5).
+    // Secret pro bots join like players over time — public servers only, and
+    // only while the arena still has a free player/bot slot for them.
+    if (!this.serverPrivate) {
       this._proJoinT -= dt;
       if (this._proJoinT <= 0) {
         this._proJoinT = randRange(20, 45);
         const proCount = this.enemies.filter((e) => e.isPro).length;
-        if (proCount < MAX_PRO_BOTS) this.spawnOnlineBot('pro');
+        if (proCount < MAX_PRO_BOTS && this.enemies.length + humans < this.serverCapacity) this.spawnOnlineBot('pro');
       }
     }
     // Broadcast bot states at ~10 Hz + a periodic snapshot to sync scores.
@@ -509,6 +515,38 @@ export class Game {
       if (key && key !== e._netAtkKey) this.network.send({ t: 'botattack', id: e.netId, type: key });
       e._netAtkKey = key;
     }
+  }
+
+  // Called when humans join/leave: players take a bot's slot when the arena is
+  // at its player/bot limit, and surplus bots leave. Regular bots are replaced
+  // first ("specific bot" = lowest kills); pro bots only go if no regulars remain.
+  reconcileBots() {
+    if (!this.isBotHost || !this.onlineRoomId) return;
+    const humans = 1 + this.remotes.size;
+    const allowedBots = Math.max(0, this.serverCapacity - humans);
+    const allowedRegular = Math.min(this.serverBots, allowedBots);
+    let guard = 24;
+    while (guard-- > 0) {
+      const regular = this.enemies.filter((e) => !e.isPro);
+      if (regular.length > allowedRegular) {
+        this.removeBotForSlot('regular');
+      } else if (this.enemies.length > allowedBots) {
+        this.removeBotForSlot(regular.length > 0 ? 'regular' : 'pro');
+      } else break;
+    }
+    this.sendBotSnapshot();
+  }
+
+  removeBotForSlot(kind) {
+    const pool = this.enemies.filter((e) => (kind === 'pro' ? e.isPro : !e.isPro));
+    if (!pool.length) return;
+    const victim = pool.reduce((a, b) => (b.stats.kills < a.stats.kills ? b : a));
+    this.hud.announce(`${victim.stats.name} has left the server`, 'left');
+    this.combat.unregister(victim);
+    this.scene.remove(victim.rig.root);
+    victim.rig.dispose();
+    const idx = this.enemies.indexOf(victim);
+    if (idx >= 0) this.enemies.splice(idx, 1);
   }
 
   setNetBots(list) {
@@ -761,12 +799,12 @@ export class Game {
     this.state.targetBots = 0;
   }
 
-  startOnline(serverId, map, bots, free = false, capacity = 12) {
+  startOnline(serverId, map, bots, capacity, hasPassword) {
     this.leaveOnlineServer();
     this.onlineRoomId = serverId;
-    this.serverFree = !!free;
-    this.serverCapacity = Math.max(2, Math.round(Number(capacity) || 12));
-    this.serverBots = Math.max(0, Math.min(this.serverFree ? 10 : 4, Math.round(Number(bots) || 0)));
+    this.serverBots = Math.max(0, Math.min(15, Math.round(Number(bots) || 0)));
+    this.serverCapacity = Math.max(2, Math.min(15, Math.round(Number(capacity) || 12)));
+    this.serverPrivate = !!hasPassword;
     this.isBotHost = false;
     this.state.targetBots = 0; // set properly once we learn whether we are the host
     if (map && THEMES[map]) { this.state.settings.map = map; if (this.state.phase === 'menu') this.applyMap(map); }

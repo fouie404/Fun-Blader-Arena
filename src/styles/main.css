@@ -1503,7 +1503,9 @@ body.touch .controls-hint {
 
 #ad-modal,
 #buy-modal,
-#leave-confirm {
+#leave-confirm,
+#create-modal,
+#join-modal {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -1511,6 +1513,29 @@ body.touch .controls-hint {
   align-items: center;
   justify-content: center;
   background: rgba(4, 3, 7, 0.85);
+}
+
+/* create-server / join-private modals */
+.cm-access {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+}
+
+.cm-acc {
+  flex: 1;
+  opacity: 0.55;
+}
+
+.cm-acc.sel {
+  opacity: 1;
+  border-color: #ffd76a;
+  box-shadow: 0 0 0 1px rgba(255, 215, 106, 0.5) inset;
+}
+
+.lock-chip {
+  font-size: 12px;
+  margin-left: 4px;
 }
 
 .warn-note {

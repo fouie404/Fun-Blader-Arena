@@ -16,9 +16,6 @@ const FRONTEND_DIR = process.env.FRONTEND_DIR
   : path.resolve(__dirname, '../dist');
 
 const store = openStore();
-// Make sure the 4 always-joinable free servers exist (they look player-made and
-// are never shown as full — a bot inside makes room when a real player joins).
-if (store.ensureFreeServers) store.ensureFreeServers();
 
 /* ---------------------------------------------------------------- */
 /* Auth helpers                                                        */
@@ -138,18 +135,18 @@ app.post('/api/servers', requireAuth, (req, res) => {
     capacity: req.body?.capacity,
     bots: req.body?.bots
   });
-  res.json({ ok: true, server: { id: s.id, name: s.name, hostId: s.hostId, hostName: req.user.username, map: s.map, capacity: s.capacity, bots: s.bots, free: !!s.isFree } });
+  res.json({ ok: true, server: { id: s.id, name: s.name, hostId: s.hostId, hostName: req.user.username, map: s.map, capacity: s.capacity, bots: s.bots, hasPassword: !!s.password } });
 });
 
 app.post('/api/servers/:id/join', requireAuth, (req, res) => {
   const r = store.joinServer(req.params.id, req.user.id, String(req.body?.password || '').trim() || null);
   if (!r.ok) {
-    const msg = r.err === 'full' ? 'Server is full.' : r.err === 'pass' ? 'Wrong password.' : 'Server not found.';
+    const msg = r.err === 'pass' ? 'Wrong passcode.' : 'Server not found.';
     return res.status(400).json({ ok: false, err: msg });
   }
   const s = r.server;
   const host = store.getUserById && store.getUserById(s.hostId);
-  res.json({ ok: true, server: { id: s.id, name: s.name, hostId: s.hostId, hostName: host ? host.username : s.hostId, map: s.map, capacity: s.capacity, bots: s.bots, playerCount: s.players.length, free: !!s.isFree } });
+  res.json({ ok: true, server: { id: s.id, name: s.name, hostId: s.hostId, hostName: host ? host.username : s.hostId, map: s.map, capacity: s.capacity, bots: s.bots, playerCount: s.players.length, hasPassword: !!s.password } });
 });
 
 app.post('/api/servers/:id/leave', requireAuth, (req, res) => {

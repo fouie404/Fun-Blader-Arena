@@ -23,6 +23,8 @@ export class Menu {
     this.adModal = null;
     this.buyModal = null;
     this.resultsEl = null;
+    this.createModal = null;
+    this.joinModal = null;
 
     this.root = document.createElement('div');
     this.root.id = 'menu';
@@ -127,22 +129,10 @@ export class Menu {
 
         <div class="menu-panel" id="panel-online" style="display:none">
           <div class="panel-title small">ONLINE ARENA</div>
-          <div class="skin-hint" id="online-status">Online multiplayer — create a server or join one. Up to 5 secret PRO fighters may sneak into any arena over time.</div>
+          <div class="skin-hint" id="online-status">Create a server or join one. Public servers get up to 5 secret PRO fighters sneaking in over time.</div>
           <div class="setting-row">
             <label>Room name</label>
             <input type="text" id="srv-name" maxlength="24" placeholder="My Arena" autocomplete="off" />
-          </div>
-          <div class="setting-row">
-            <label>Map</label>
-            <select id="srv-map" class="menu-select"></select>
-          </div>
-          <div class="setting-row">
-            <label>Player slots</label>
-            <select id="srv-slots" class="menu-select"></select>
-          </div>
-          <div class="setting-row">
-            <label>Add bots</label>
-            <select id="srv-bots" class="menu-select"></select>
           </div>
           <div class="srv-actions">
             <button class="menu-btn small" id="btn-create-server">CREATE SERVER</button>
@@ -171,32 +161,6 @@ export class Menu {
     `;
     document.body.appendChild(this.root);
     this.pushAd(this.root.querySelector('.adsbygoogle'));
-
-    // Populate the create-server options: map (all themes), player slots (2-15),
-    // regular bots (0-4). Secret pro bots are NOT configurable — they join on their own.
-    const srvMap = this.root.querySelector('#srv-map');
-    for (const [id, t] of Object.entries(THEMES)) {
-      const o = document.createElement('option');
-      o.value = id;
-      o.textContent = t.name || id;
-      srvMap.appendChild(o);
-    }
-    const srvSlots = this.root.querySelector('#srv-slots');
-    for (let n = 2; n <= 15; n++) {
-      const o = document.createElement('option');
-      o.value = String(n);
-      o.textContent = `${n} players`;
-      if (n === 8) o.selected = true;
-      srvSlots.appendChild(o);
-    }
-    const srvBots = this.root.querySelector('#srv-bots');
-    for (let n = 0; n <= 4; n++) {
-      const o = document.createElement('option');
-      o.value = String(n);
-      o.textContent = n === 0 ? 'No bots' : `${n} bot${n > 1 ? 's' : ''}`;
-      if (n === 2) o.selected = true;
-      srvBots.appendChild(o);
-    }
 
     this.pauseOverlay = null;
 
@@ -630,39 +594,160 @@ export class Menu {
       return;
     }
     list.innerHTML = servers.map((s) => `
-      <button class="server-row" data-id="${s.id}">
-        <span class="server-name">${s.name || 'Arena'}</span>
+      <button class="server-row" data-id="${s.id}" data-locked="${s.hasPassword ? 1 : 0}">
+        <span class="server-name">${s.name || 'Arena'}${s.hasPassword ? ' <span class="lock-chip">&#128274;</span>' : ''}</span>
         <span class="server-host">by ${s.hostName || s.hostId}</span>
-        <span class="server-meta">${s.map || 'citadel'} &middot; ${s.playerCount || 0}/${s.capacity} players &middot; ${s.bots || 0} bot${(s.bots || 0) === 1 ? '' : 's'} ${s.hasPassword ? '&middot; <b>LOCKED</b>' : ''}</span>
+        <span class="server-meta">${s.map || 'citadel'} &middot; ${s.playerCount || 0}/${s.capacity} players &middot; ${s.bots || 0} bot${(s.bots || 0) === 1 ? '' : 's'}${s.hasPassword ? ' &middot; <b>PRIVATE</b>' : ''}</span>
       </button>`).join('');
     for (const row of list.querySelectorAll('.server-row')) {
-      row.addEventListener('click', () => this.joinServerFlow(row.dataset.id));
+      row.addEventListener('click', () => this.joinServerFlow(row.dataset.id, row.dataset.locked === '1'));
     }
   }
 
   createServerFlow() {
-    const input = this.root.querySelector('#srv-name');
-    const name = (input && input.value.trim()) || 'My Arena';
-    const map = (this.root.querySelector('#srv-map') || {}).value || 'citadel';
-    const capacity = Number((this.root.querySelector('#srv-slots') || {}).value) || 8;
-    const bots = Number((this.root.querySelector('#srv-bots') || {}).value);
-    this.createServer(name, { map, capacity, bots: Number.isFinite(bots) ? bots : 2 });
+    this.showCreateModal();
   }
 
-  async createServer(name, opts = {}) {
-    const status = this.root.querySelector('#online-status');
-    if (status) { status.textContent = 'Creating server…'; status.style.color = '#9dff7a'; }
-    const res = await this.onCreateServer(name, { map: 'citadel', capacity: 8, bots: 2, ...opts });
-    if (!res.ok && status) { status.textContent = res.err || 'Failed to create server.'; status.style.color = '#ff8a7a'; }
-    else if (!res.ok) { /* no status el */ }
-    else this.refreshServerList();
+  // Create-server modal: map, public/private (+ passcode), player/bot limit
+  // and how many bots fill those slots at start.
+  showCreateModal() {
+    if (this.createModal) return;
+    const ov = document.createElement('div');
+    ov.id = 'create-modal';
+    const mapOptions = Object.entries(THEMES)
+      .map(([id, t]) => `<option value="${id}">${t.name || id}</option>`)
+      .join('');
+    ov.innerHTML = `
+      <div class="ad-card">
+        <div class="ad-title">CREATE SERVER</div>
+        <div class="setting-row"><label>Map</label><select id="cm-map" class="menu-select">${mapOptions}</select></div>
+        <div class="setting-row"><label>Access</label>
+          <div class="cm-access">
+            <button class="menu-btn small cm-acc sel" id="cm-public">PUBLIC</button>
+            <button class="menu-btn small cm-acc" id="cm-private">PRIVATE</button>
+          </div>
+        </div>
+        <div class="setting-row" id="cm-pass-row" style="display:none">
+          <label>Passcode</label>
+          <input type="text" id="cm-pass" maxlength="16" placeholder="Passcode" autocomplete="off" />
+        </div>
+        <div class="setting-row"><label>Player / bot limit</label><select id="cm-limit" class="menu-select"></select></div>
+        <div class="setting-row"><label>Bots at start</label><select id="cm-bots" class="menu-select"></select></div>
+        <div class="ad-status" id="cm-status">Bots fill the player slots — a joining player replaces one.</div>
+        <div class="srv-actions">
+          <button class="menu-btn" id="cm-create">CREATE</button>
+          <button class="menu-btn small" id="cm-cancel">CANCEL</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    this.createModal = ov;
+
+    const limitSel = ov.querySelector('#cm-limit');
+    for (let n = 2; n <= 15; n++) {
+      const o = document.createElement('option');
+      o.value = String(n);
+      o.textContent = `${n} fighters`;
+      if (n === 8) o.selected = true;
+      limitSel.appendChild(o);
+    }
+    const botsSel = ov.querySelector('#cm-bots');
+    const fillBots = () => {
+      const limit = Number(limitSel.value) || 8;
+      const prev = Number(botsSel.value) || 0;
+      botsSel.innerHTML = '';
+      for (let n = 0; n <= limit; n++) {
+        const o = document.createElement('option');
+        o.value = String(n);
+        o.textContent = n === 0 ? 'No bots' : `${n} bot${n > 1 ? 's' : ''}`;
+        if (n === Math.min(prev, limit)) o.selected = true;
+        botsSel.appendChild(o);
+      }
+    };
+    fillBots();
+    limitSel.addEventListener('change', fillBots);
+
+    const pubBtn = ov.querySelector('#cm-public');
+    const privBtn = ov.querySelector('#cm-private');
+    const passRow = ov.querySelector('#cm-pass-row');
+    const setAccess = (priv) => {
+      pubBtn.classList.toggle('sel', !priv);
+      privBtn.classList.toggle('sel', priv);
+      passRow.style.display = priv ? 'flex' : 'none';
+    };
+    pubBtn.addEventListener('click', () => setAccess(false));
+    privBtn.addEventListener('click', () => setAccess(true));
+
+    ov.querySelector('#cm-cancel').addEventListener('click', () => { ov.remove(); this.createModal = null; });
+    ov.querySelector('#cm-create').addEventListener('click', async () => {
+      const status = ov.querySelector('#cm-status');
+      const isPrivate = privBtn.classList.contains('sel');
+      const pass = (ov.querySelector('#cm-pass').value || '').trim();
+      if (isPrivate && !pass) {
+        status.style.color = '#ff8a7a';
+        status.textContent = 'Enter a passcode for the private server.';
+        return;
+      }
+      const input = this.root.querySelector('#srv-name');
+      const name = (input && input.value.trim()) || 'My Arena';
+      status.style.color = '#9dff7a';
+      status.textContent = 'Creating server…';
+      const opts = {
+        map: ov.querySelector('#cm-map').value,
+        capacity: Number(limitSel.value) || 8,
+        bots: Number(botsSel.value) || 0,
+        password: isPrivate ? pass : null
+      };
+      const res = await this.onCreateServer(name, opts);
+      if (!res.ok) {
+        status.style.color = '#ff8a7a';
+        status.textContent = res.err || 'Failed to create server.';
+      }
+      // On success the game starts (menu hides itself).
+      ov.remove();
+      this.createModal = null;
+    });
   }
 
-  async joinServerFlow(id) {
-    const status = this.root.querySelector('#online-status');
+  async joinServerFlow(id, hasPassword) {
+    if (hasPassword) { this.showJoinModal(id); return; }
+    await this.doJoin(id, '');
+  }
+
+  // Private servers stay listed but ask for the passcode before joining.
+  showJoinModal(id) {
+    if (this.joinModal) return;
+    const ov = document.createElement('div');
+    ov.id = 'join-modal';
+    ov.innerHTML = `
+      <div class="ad-card">
+        <div class="ad-title">PRIVATE SERVER</div>
+        <div class="ad-sub">This server is locked. Enter its passcode to join.</div>
+        <div class="setting-row"><label>Passcode</label><input type="text" id="jm-pass" maxlength="16" placeholder="Passcode" autocomplete="off" /></div>
+        <div class="ad-status" id="jm-status"></div>
+        <div class="srv-actions">
+          <button class="menu-btn" id="jm-join">JOIN</button>
+          <button class="menu-btn small" id="jm-cancel">CANCEL</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    this.joinModal = ov;
+    const pass = ov.querySelector('#jm-pass');
+    try { pass.focus(); } catch { /* ignore */ }
+    const tryJoin = () => this.doJoin(id, pass.value.trim(), ov.querySelector('#jm-status'));
+    ov.querySelector('#jm-join').addEventListener('click', tryJoin);
+    pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryJoin(); });
+    ov.querySelector('#jm-cancel').addEventListener('click', () => { ov.remove(); this.joinModal = null; });
+  }
+
+  async doJoin(id, password, statusEl) {
+    const status = statusEl || this.root.querySelector('#online-status');
     if (status) { status.textContent = 'Joining…'; status.style.color = '#9dff7a'; }
-    const res = await this.onJoinServer(id, '');
-    if (!res.ok && status) { status.textContent = res.err || 'Could not join.'; status.style.color = '#ff8a7a'; }
+    const res = await this.onJoinServer(id, password || '');
+    if (!res.ok) {
+      if (status) { status.textContent = res.err || 'Could not join.'; status.style.color = '#ff8a7a'; }
+      return;
+    }
+    if (this.joinModal) { this.joinModal.remove(); this.joinModal = null; }
   }
 
   refreshStats() {
